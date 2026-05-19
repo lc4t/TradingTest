@@ -7,7 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from db import DBClient
+from ..data.repository import DBClient
 import requests
 import time
 
@@ -200,8 +200,7 @@ class EmailNotifyTemplate(NotifyTemplate):
             raise ValueError("Missing email configuration in environment variables")
 
         # 获取模板目录的绝对路径
-        current_dir = Path(__file__).parent
-        template_dir = current_dir / "templates"
+        template_dir = Path(__file__).resolve().parent.parent / "templates"
 
         # 初始化Jinja2模板环境
         self.env = Environment(
