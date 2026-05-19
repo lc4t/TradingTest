@@ -3,7 +3,8 @@ FROM python:3.13-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_PYTHON_PREFERENCE=only-system
 
 WORKDIR /app
 
@@ -14,15 +15,16 @@ RUN apt-get update \
 # Install uv
 RUN pip install --upgrade pip && pip install uv
 
-# Install Python deps first for better layer caching
-COPY pyproject.toml ./
-COPY uv.lock* ./
-RUN uv sync --no-dev --frozen || uv sync --no-dev
+# Install Python deps first for better layer caching.
+# .python-version is copied here so the build-time venv matches what
+# `uv run` will resolve at runtime — avoiding a venv rebuild on first run.
+COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --no-dev --frozen
 
 # Copy the rest of the backend
 COPY . .
 
-# Drop frontend out of the backend image — it is deployed separately to Cloudflare Pages
-RUN rm -rf frontend
+# The frontend is deployed separately; keep the image lean.
+RUN rm -rf frontend tests
 
 CMD ["uv", "run", "python", "fetcher.py", "--help"]
