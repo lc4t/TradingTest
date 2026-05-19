@@ -37,8 +37,8 @@ frontend/.wrangler/
 frontend/.vercel/
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
-frontend/data/*.json
-frontend/public/data/*.json
+frontend/data/**/*.json
+frontend/public/data/**/*.json
 
 # ---- Logs ----
 logs/
@@ -59,3 +59,4 @@ logs/
 # ---- Misc ----
 *.pyc
 *.local
+.claude/
