@@ -19,11 +19,14 @@ RUN pip install --upgrade pip && pip install uv
 # Install Python deps first for better layer caching.
 # .python-version is copied here so the build-time venv matches what
 # `uv run` will resolve at runtime — avoiding a venv rebuild on first run.
-COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --no-dev --frozen
+# README.md is included because pyproject.toml's `readme = ...` requires it.
+COPY pyproject.toml uv.lock .python-version README.md ./
+RUN uv sync --no-dev --frozen --no-install-project
 
 # Copy the rest of the backend
 COPY . .
+# Install the tradingtest package itself now that source is in place.
+RUN uv sync --no-dev --frozen
 
 # The frontend is deployed separately; keep the image lean.
 RUN rm -rf frontend tests
