@@ -15,7 +15,15 @@ from .data.fetcher import (
     YFinanceFetcher,
 )
 from .engine.single import SingleBacktestEngine
+from .engine.multi import MultiBacktestEngine
 from .strategies.dual_ma import DualMAStrategy
+from .strategies.momentum import Schedule, MOMENTUM_FUNCTIONS
+from .api import (
+    BacktestResult,
+    MomentumBasket,
+    MomentumTopN,
+    run_backtest,
+)
 
 __all__ = [
     "DBClient",
@@ -26,5 +34,12 @@ __all__ = [
     "StockDataManager",
     "YFinanceFetcher",
     "SingleBacktestEngine",
+    "MultiBacktestEngine",
     "DualMAStrategy",
+    "Schedule",
+    "MOMENTUM_FUNCTIONS",
+    "BacktestResult",
+    "MomentumBasket",
+    "MomentumTopN",
+    "run_backtest",
 ]

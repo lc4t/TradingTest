@@ -1,32 +1,42 @@
 # TradingTest
 
-一个量化交易工具集：**行情数据同步** + **策略回测**，附带一个可独立部署的 Next.js 前端。
+量化交易工具集：**行情数据同步** + **策略回测**，配有一个独立部署的 Next.js 前端。
 
-> 开源仓库。代码中不包含任何 API key、密码或个人信息——所有可配置项都在 `.env.example` 里列明。
+> 完全开源，代码内不包含 API key / 密码 / 个人信息——可配置项见 `.env.example`。
 
-## 功能
+## 内置策略
 
-- 多数据源拉取历史 OHLCV 行情（yfinance / adata / …）
-- 通过 SQLAlchemy 持久化到 MySQL
-- 基于 `backtrader` 的策略回测，内置双均线、吊灯止损、ADR、参数寻优等
-- 输出结构化 JSON 报告，供前端展示
-- 静态 Next.js 仪表盘，可发布到任意静态主机（Cloudflare Pages / Vercel / 自托管均可）
-- 当日信号汇总，可通过 PushGo / SMTP 推送
+- **双均线 + 吊灯/ADR 止损**（1.0 版即有，单标的）—— 见 [`tradingtest/strategies/dual_ma.py`](tradingtest/strategies/dual_ma.py)
+- **动量轮动**（2.0 新增，多标的）—— 两个变体：
+  - `MomentumBasket`：用户为每个候选标的预设目标权重，动量过阈值的留，其余转现金。
+  - `MomentumTopN`：每期取动量最强的 N 个，等权持有。
 
 ## 仓库结构
 
 ```
 .
-├── *.py                     # 后端：fetcher / backtest / db / notify / …
-├── templates/               # Jinja2 模板（HTML 报告）
-├── tests/                   # pytest 测试
-├── frontend/                # Next.js 静态站点（独立部署）
-├── Dockerfile               # 后端镜像（发布到 GHCR）
-├── pyproject.toml           # 由 uv 管理的 Python 项目
-└── .github/workflows/       # CI：构建并推送 Docker 镜像
+├── tradingtest/                # Python 包
+│   ├── api.py                  # 用户态门面 run_backtest / MomentumBasket / ...
+│   ├── data/                   # 数据仓库（MySQL）+ fetcher
+│   ├── strategies/             # base / signals / dual_ma / momentum / momentum_rotation
+│   ├── engine/                 # single / multi / sweep
+│   ├── analysis/               # metrics / report
+│   ├── io/                     # notify / digest / json_export / csv_export
+│   ├── cli/                    # argparse 入口
+│   └── templates/              # Jinja2 报告模板
+├── notebooks/quickstart.ipynb  # Jupyter 示例
+├── frontend/                   # Next.js 静态站点（独立部署）
+├── tests/                      # pytest
+├── scripts/                    # 一次性脚本（csvfilter 等）
+├── Dockerfile                  # 后端镜像（GHCR）
+├── pyproject.toml              # uv-managed Python 项目
+└── .github/workflows/          # CI: 构建并推送 Docker 镜像
 ```
 
-## 后端快速上手
+> 根目录的 `backtest.py` / `fetcher.py` / `daily_signal_digest.py` 是 **向后兼容 shim**——
+> 老的工作流命令仍能直接使用，内部转发到 `tradingtest.cli.*`。
+
+## 安装
 
 依赖：[`uv`](https://docs.astral.sh/uv/) 与 Python 3.13+。
 
@@ -35,82 +45,137 @@ uv sync
 cp .env.example .env   # 按需填入 DB / SMTP / PushGo
 ```
 
-### 同步历史行情
+## CLI 用法（与 1.0 兼容）
 
 ```bash
-uv run python fetcher.py --start-date 2023-01-01 --end-date 2023-12-31 --symbol <SYMBOL>
-# 不指定 --symbol/--end-date 时，会从数据库 symbol_info 表中读取标的列表
-```
+# 同步历史行情
+uv run python -m tradingtest.cli.fetcher --start-date 2024-12-01
 
-### 运行回测
-
-```bash
-uv run python backtest.py <SYMBOL> \
+# 单标的回测（双均线 + 吊灯）
+uv run python -m tradingtest.cli.backtest 159915.SZ \
   --initial-capital 50000 \
   --start-date 2022-01-01 \
   --use-ma --ma-short 5 --ma-long 8 \
   --use-chandelier --chandelier-multiplier 1.5 --chandelier-period 15 \
-  --output-json data/<SYMBOL>.json
+  --output-json data/159915.SZ.json
+
+# 当日信号汇总
+uv run python -m tradingtest.cli.digest --data-dir data
 ```
 
-参数支持 range 形式做网格寻优，例如 `--ma-long 8-15`。
+## 交互式 API（2.0 新增）
 
-### 当日信号汇总
+```python
+from tradingtest import run_backtest, MomentumBasket, MomentumTopN, Schedule
 
-```bash
-uv run python daily_signal_digest.py --data-dir data
-# 可选参数：--date 2026-03-10 --dry-run --max-retries 3 --retry-delay 5
+# 加权篮子
+result = run_backtest(
+    strategy=MomentumBasket(
+        weights={
+            "159915.SZ": 0.4,
+            "513100.SH": 0.4,
+            "518880.SH": 0.2,
+        },
+        momentum_fn="simple_return",
+        lookback=63,
+        threshold=0.0,                              # 动量为负转现金
+        schedule=Schedule.monthly_nth_trading_day(1),
+    ),
+    start="2022-01-01",
+    initial_capital=50_000,
+)
+
+print(result.summary())
+result.trades         # → DataFrame
+result.metrics        # → dict
+result.next_signal    # → dict
+result.plot()         # → matplotlib figure
 ```
 
-PushGo / SMTP 凭据从环境变量读取，见 `.env.example`。
+详见 [`notebooks/quickstart.ipynb`](notebooks/quickstart.ipynb)。
+
+## 动量轮动策略参数
+
+### `MomentumBasket(weights, momentum_fn, lookback, threshold, schedule, cooldown_days)`
+
+| 参数              | 类型              | 默认值                  | 说明 |
+| ----------------- | ----------------- | ----------------------- | ---- |
+| `weights`         | `dict[str,float]` | —                       | `{symbol: 目标权重}`。所有权重之和必须 ≤ 1.0；未占满的部分自动为现金底仓。允许负权重值会被拒绝。 |
+| `momentum_fn`     | `str` 或 callable | `"simple_return"`       | 动量计算函数，见下表。也可传入自定义 `(closes, lookback) -> float`。 |
+| `lookback`        | `int`             | `63`                    | 动量回望窗口（交易日）。3 个月 ≈ 63 ，6 个月 ≈ 120，1 年 ≈ 252。 |
+| `threshold`       | `float`           | `-0.99`                 | 动量准入门槛。`momentum < threshold` 的标的转现金。默认 -0.99 ≈ 不过滤；改成 `0.0` 就成了 "不买入下跌标的"。 |
+| `schedule`        | `Schedule`        | `every_n_trading_days(1)` | 调仓日历，见下方表格。 |
+| `cooldown_days`   | `int`             | `0`                     | 一次 rebalance 后强制等待 N 个交易日。0 = 不限制。 |
+
+### `MomentumTopN(universe, top_n, cash_buffer, momentum_fn, lookback, threshold, schedule, cooldown_days)`
+
+| 参数             | 类型           | 默认值                    | 说明 |
+| ---------------- | -------------- | ------------------------- | ---- |
+| `universe`       | `list[str]`    | —                         | 候选标的列表。 |
+| `top_n`          | `int`          | `1`                       | 每期持有几个标的（等权）。 |
+| `cash_buffer`    | `float`        | `0.0`                     | 永久保留的现金比例（0 ≤ x < 1）。 |
+| 其余参数同上     |                |                           |      |
+
+### 动量算法（5 种）
+
+| `momentum_fn` key | 算法                                      | 适用场景 |
+| ----------------- | ----------------------------------------- | -------- |
+| `simple_return`   | `close[t] / close[t-N] - 1`               | 最经典、最普遍。|
+| `log_return`      | `ln(close[t] / close[t-N])`               | 对极端涨跌不敏感，适合横截面比较。|
+| `sharpe`          | `年化日均对数收益 / 年化日波动`           | 偏好"稳定上涨"而不是"暴涨"。|
+| `weighted`        | 指数衰减加权对数收益（默认 `half_life=21` 交易日） | 强调近期表现，老数据权重快速衰减。|
+| `dual_12_1`       | `12 个月对数收益 − 最近 1 个月对数收益`   | Asness 等经典论文，抑制短期反转噪声。默认 `lookback=252, short_skip=21`。|
+
+### 调仓日历 (`Schedule`)
+
+| 工厂                                       | 含义 |
+| ------------------------------------------ | ---- |
+| `Schedule.every_n_trading_days(n)`         | 每 N 个交易日触发。首日必触发。**默认 `n=1`**。 |
+| `Schedule.weekly(weekday=1)`               | 每周特定工作日（ISO：周一=1...周五=5）。 |
+| `Schedule.weekly_nth_trading_day(n=1)`     | 每周第 N 个交易日。 |
+| `Schedule.monthly(day=1)`                  | 每月某个**自然日**当天首个交易日（含或之后）。 |
+| `Schedule.monthly_nth_trading_day(n=1)`    | 每月第 N 个交易日。 |
+
+### 执行细节
+
+- **回测引擎**：基于 [backtrader](https://www.backtrader.com/)，每根 K 线代表一个交易日。
+- **执行时机**：rebalance 信号在当日收盘后产生，订单默认在 **次日开盘** 成交（backtrader 默认行为）。
+- **手续费**：通过 `commission_rate` 参数设置，默认 `0.0001`（万分之一）。
 
 ## Docker 镜像
 
 后端镜像由 [.github/workflows/docker-build.yml](.github/workflows/docker-build.yml) 自动构建并推送到 GHCR：
 
 ```
-ghcr.io/<owner>/tradingtest-<branch>:<short-sha>
-ghcr.io/<owner>/tradingtest-<branch>:latest
+ghcr.io/lc4t/tradingtest-<branch>:<short-sha>
+ghcr.io/lc4t/tradingtest-<branch>:latest
 ```
 
-本地运行示例：
+- `main` / `1.0` / `2.0.0.dev`  三个分支都会自动构建。
+- 1.0 是当前稳定分支；2.0.0.dev 在开发中。
 
-```bash
-docker pull ghcr.io/<owner>/tradingtest-main:latest
-docker run --rm --env-file .env ghcr.io/<owner>/tradingtest-main:latest \
-  uv run python fetcher.py --help
-```
+### 镜像内布局
 
-镜像内布局：
-
-| 路径               | 内容                                    |
-| ------------------ | --------------------------------------- |
-| `/app/*.py`        | 所有后端 Python 源文件                  |
-| `/app/templates/`  | Jinja2 模板                             |
-| `/app/.venv/`      | 构建时安装好的虚拟环境                  |
-| ~~`/app/frontend/`~~ | **不包含**——前端独立部署，不进镜像 |
-
-> 注意：仓库的 `frontend/` 不会被打进镜像；如果你的工作流需要部署前端，请在另一个流程里完成。
-
-## 前端
-
-源代码位于 [`frontend/`](frontend/)，是一个 Next.js 14 静态导出（`output: 'export'`）项目。
-本仓库目前**不**自动部署前端——你可以在自己的工作流中执行：
-
-```bash
-cd frontend
-yarn install
-yarn build         # 产物在 frontend/out/
-```
-
-然后用 `wrangler pages deploy`、`vercel deploy`、或任意静态托管即可。
+| 路径 | 内容 |
+| ---- | ---- |
+| `/app/tradingtest/` | 全部 Python 源码（包） |
+| `/app/.venv/` | 构建时安装好的虚拟环境 |
+| `/app/{backtest,fetcher,daily_signal_digest}.py` | 向后兼容的 CLI shim |
+| ~~`/app/frontend/`~~ | **不打入镜像**——前端独立部署 |
 
 ## 测试
 
 ```bash
 uv run pytest
-uv run pytest --cov=. --cov-report=term-missing
+uv run pytest --cov=tradingtest --cov-report=term-missing
 ```
+
+## 路线图
+
+- [x] 1.0：双均线策略 + 参数寻优
+- [x] 2.0.0.dev：动量轮动（MomentumBasket / MomentumTopN）+ 用户态 API + Jupyter
+- [ ] 2.0：上线后停留为稳定版
+- [ ] 后续：更多策略（趋势 / 反转 / 配对交易），更丰富的资金管理
 
 ## License
 

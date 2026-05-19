@@ -26,15 +26,13 @@ from sqlalchemy.sql import func, text
 # 加载环境变量
 load_dotenv()
 
-# 获取数据库配置
+# 数据库配置从环境读取，但延迟到 DBClient 实例化时才校验
+# （让 `import tradingtest` 在没有 .env 的环境也能成功）
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
-
-if not all([DB_PASSWORD, DB_NAME]):
-    raise ValueError("Missing required database configuration in .env file")
 
 Base = declarative_base()
 
