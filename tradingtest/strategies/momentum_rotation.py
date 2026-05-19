@@ -69,6 +69,8 @@ class _MomentumStrategyMixinState:
     cash_buffer: float = 0.0
     last_signal_reason: str = ""
     cooldown_remaining: int = 0
+    # 内部：上次实际下单时使用的"目标签名"。同样的签名再算出来就不再下单。
+    last_target_signature: Optional[tuple] = None
 
 
 class _MomentumBaseStrategy(bt.Strategy):
@@ -133,6 +135,11 @@ class _MomentumBaseStrategy(bt.Strategy):
         return "[动量] " + ", ".join(parts)
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _signature(targets: Dict[str, float]) -> tuple:
+        """目标向量的"签名"：把权重 round 到百分位，用于判定是否需要真下单."""
+        return tuple(sorted((s, round(w, 2)) for s, w in targets.items()))
+
     def next(self):
         today = self.datas[0].datetime.date(0)
 
@@ -146,40 +153,57 @@ class _MomentumBaseStrategy(bt.Strategy):
             return
 
         # 触发 rebalance
-        momentums: Dict[str, float] = {}
-        for name, feed in self._feed_by_name.items():
-            momentums[name] = self._compute_momentum(feed)
+        momentums: Dict[str, float] = {
+            name: self._compute_momentum(feed)
+            for name, feed in self._feed_by_name.items()
+        }
+
+        # 任何 NaN 都意味着 lookback 还没填满，等数据
+        if any(m != m for m in momentums.values()):  # NaN
+            return
 
         targets = self._compute_targets(momentums)
+        sig = self._signature(targets)
+        if sig == self._state.last_target_signature:
+            # 选中标的没变 → 不下单 (只让自然持仓涨跌)
+            return
+
         reason = self._signal_reason(momentums)
 
-        # 调仓: 简化为按目标比例直接重新分配
+        # 两轮下单：先全部 SELL 释放资金，再 BUY，避免保证金不足
         portfolio_value = self.broker.getvalue()
+        deltas: Dict[str, float] = {}
         for name, feed in self._feed_by_name.items():
             target_weight = targets.get(name, 0.0)
             target_value = portfolio_value * target_weight
-            current_size = self.getposition(feed).size
-            current_value = current_size * feed.close[0]
-            delta_value = target_value - current_value
+            current_value = self.getposition(feed).size * feed.close[0]
+            deltas[name] = target_value - current_value
 
-            if abs(delta_value) < feed.close[0]:  # 一手都不到，跳过
+        # 1. SELL: 减仓或全部卖出
+        for name, feed in self._feed_by_name.items():
+            delta_value = deltas[name]
+            if delta_value >= 0:
                 continue
+            size_delta = _floor_int(-delta_value / feed.close[0])
+            size_delta = min(size_delta, self.getposition(feed).size)
+            if size_delta <= 0:
+                continue
+            order = self.sell(data=feed, size=size_delta)
+            self._last_signal_reasons[id(order)] = reason
 
-            if delta_value > 0:
-                size_delta = _floor_int(delta_value / feed.close[0])
-                if size_delta <= 0:
-                    continue
-                order = self.buy(data=feed, size=size_delta)
-                self._last_signal_reasons[id(order)] = reason
-            else:
-                size_delta = _floor_int(-delta_value / feed.close[0])
-                size_delta = min(size_delta, current_size)
-                if size_delta <= 0:
-                    continue
-                order = self.sell(data=feed, size=size_delta)
-                self._last_signal_reasons[id(order)] = reason
+        # 2. BUY: 加仓
+        for name, feed in self._feed_by_name.items():
+            delta_value = deltas[name]
+            if delta_value <= 0:
+                continue
+            # 加 safety margin: 留 1% 防止 fill 时价格偏离导致保证金不足
+            size_delta = _floor_int(delta_value * 0.99 / feed.close[0])
+            if size_delta <= 0:
+                continue
+            order = self.buy(data=feed, size=size_delta)
+            self._last_signal_reasons[id(order)] = reason
 
-        # 冷却期：N 个交易日内不再 fire
+        self._state.last_target_signature = sig
         self._state.cooldown_remaining = self._state.cooldown_days
 
     # ------------------------------------------------------------------
