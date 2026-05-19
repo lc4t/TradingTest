@@ -1,0 +1,61 @@
+# ---- Secrets / local env ----
+.env
+.env.local
+.env.*.local
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Virtual env ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- uv ----
+# Keep uv.lock checked in; ignore cache only
+.uv/
+
+# ---- Node / Next.js (frontend) ----
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.wrangler/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+frontend/data/*.json
+frontend/public/data/*.json
+
+# ---- Logs ----
+logs/
+*.log
+*.log.*
+
+# ---- Data artifacts ----
+*.csv
+*.zip
+
+# ---- OS / IDE ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---- Misc ----
+*.pyc
+*.local
