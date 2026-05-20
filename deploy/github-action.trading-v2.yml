@@ -1,0 +1,119 @@
+name: Trading回测&部署 (v2)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 16 * * 1-5"  # UTC 16:00 == 北京/新加坡 0:00
+
+jobs:
+  backtest-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 拉取 TradingTest 仓库（用于前端构建，含 /rotation 页面）
+        uses: actions/checkout@v4
+        with:
+          repository: lc4t/TradingTest
+          ref: "2.0.0.dev"
+          path: tradingtest
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- 主流程：保持在已验证的 1.0 镜像上，行为零变化 ----
+      - name: 容器内跑回测（单标的，1.0 镜像）
+        run: |
+          set -e
+          mkdir -p tradingtest/frontend/data tradingtest/frontend/data/rotation
+          docker run --rm \
+            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -e TZ=Asia/Shanghai \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_PORT=${{ secrets.DB_PORT }} \
+            -e DB_NAME=trading \
+            -e SMTP_SERVER=${{ secrets.SMTP_SERVER }} \
+            -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
+            -e SMTP_USERNAME=${{ secrets.SMTP_USERNAME }} \
+            -e SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
+            -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
+            -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
+            -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
+            ghcr.io/lc4t/tradingtest-1.0:latest \
+            bash -c "
+              date && cd /app && \
+              uv run python fetcher.py --start-date 2024-12-01 && \
+              uv run python backtest.py 513380.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 5  --ma-long 20 --use-chandelier --chandelier-multiplier 3.5 --chandelier-period 55 --output-json data/513380.SS.json && \
+              uv run python backtest.py 159915.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 19 --ma-long 26 --use-chandelier --chandelier-multiplier 3.6 --chandelier-period 20 --output-json data/159915.SZ.json && \
+              uv run python backtest.py 159941.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 18 --ma-long 25 --use-chandelier --chandelier-multiplier 3   --chandelier-period 55 --output-json data/159941.SZ.json && \
+              uv run python backtest.py 159869.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 21 --ma-long 26 --use-chandelier --chandelier-multiplier 1   --chandelier-period 38 --output-json data/159869.SZ.json && \
+              uv run python backtest.py 159665.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-12-22 --use-ma --ma-short 7  --ma-long 16 --use-chandelier --chandelier-multiplier 3   --chandelier-period 40 --output-json data/159665.SZ.json && \
+              uv run python backtest.py 588000.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2020-09-28 --use-ma --ma-short 6  --ma-long 15 --use-chandelier --chandelier-multiplier 1   --chandelier-period 80 --output-json data/588000.SS.json && \
+              uv run python backtest.py 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 30 --ma-long 55 --use-chandelier --chandelier-multiplier 2.1 --chandelier-period 30 --output-json data/0700.HK.json && \
+              uv run python backtest.py 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
+              ls -aslh data && \
+              uv run python daily_signal_digest.py --data-dir data
+            "
+
+      # ---- 新增：动量轮动（2.0.0.dev 镜像，完全 non-fatal，挂了也不影响主流程） ----
+      - name: 动量轮动回测（2.0.0.dev 镜像，non-fatal）
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -e TZ=Asia/Shanghai \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_PORT=${{ secrets.DB_PORT }} \
+            -e DB_NAME=trading \
+            ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
+            bash -c "
+              cd /app && \
+              echo '--- 补齐轮动标的历史 (non-fatal) ---' ; \
+              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 513100.SH || true ; \
+              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 518880.SH || true ; \
+              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 159915.SZ || true ; \
+              echo '--- 动量轮动 Top-1 ---' ; \
+              uv run python -m tradingtest.cli.rotation_backtest \
+                --strategy-id momentum-top1 \
+                --strategy-name '动量轮动 Top-1（创业板/纳指/黄金）' \
+                --universe 159915.SZ,513100.SH,518880.SH \
+                --top-n 1 --cash-buffer 0.05 \
+                --momentum-fn simple_return --lookback 23 --schedule daily \
+                --start-date 2022-01-01 --initial-capital 50000 \
+                --output-json data/rotation/momentum-top1.json && \
+              ls -aslh data/rotation
+            "
+
+      - name: 让 runner 拥有 data/ 文件
+        run: sudo chown -R "$USER":"$USER" tradingtest/frontend/data
+
+      - name: 配置 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: yarn
+          cache-dependency-path: tradingtest/frontend/yarn.lock
+
+      - name: 构建前端
+        working-directory: tradingtest/frontend
+        env:
+          NEXT_PUBLIC_GA_ID: G-59PSJW48XQ
+        run: |
+          ls -al data/
+          ls -al data/rotation || true
+          export NEXT_PUBLIC_BUILD_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%dT%H:%M:%S+08:00')
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: 部署到 Cloudflare Pages
+        working-directory: tradingtest/frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: yarn wrangler pages deploy out --project-name=trading
