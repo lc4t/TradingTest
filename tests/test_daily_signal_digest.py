@@ -8,7 +8,7 @@ from unittest import mock
 from urllib import error
 import os
 
-import daily_signal_digest as digest
+from tradingtest.io import digest
 
 
 def make_report(symbol: str, name: str, report_date: str, action: str, **overrides):

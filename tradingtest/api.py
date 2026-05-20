@@ -67,6 +67,7 @@ class MomentumBasket:
     threshold: float = -0.99
     schedule: Schedule = field(default_factory=lambda: Schedule.every_n_trading_days(1))
     cooldown_days: int = 0
+    trend_filter_ma: Optional[int] = None  # 只在收盘价 > N 日均线时才持有
 
     def _validate(self) -> None:
         if not self.weights:
@@ -87,6 +88,7 @@ class MomentumBasket:
             threshold=self.threshold,
             cooldown_days=self.cooldown_days,
             target_weights=dict(self.weights),
+            trend_ma=self.trend_filter_ma,
         )
 
     def _universe(self) -> List[str]:
@@ -117,6 +119,7 @@ class MomentumTopN:
     threshold: float = -0.99
     schedule: Schedule = field(default_factory=lambda: Schedule.every_n_trading_days(1))
     cooldown_days: int = 0
+    trend_filter_ma: Optional[int] = None  # 只在收盘价 > N 日均线时才持有
 
     def _validate(self) -> None:
         if not self.universe:
@@ -136,6 +139,7 @@ class MomentumTopN:
             cooldown_days=self.cooldown_days,
             top_n=self.top_n,
             cash_buffer=self.cash_buffer,
+            trend_ma=self.trend_filter_ma,
         )
 
     def _universe(self) -> List[str]:

@@ -96,6 +96,10 @@ def _build_parser() -> ArgumentParser:
              '/ "monthly:N" / "monthly_nth:N"',
     )
     parser.add_argument("--cooldown-days", type=int, default=0, help="一次调仓后冷却天数")
+    parser.add_argument(
+        "--trend-filter-ma", type=int, default=None,
+        help="趋势过滤：仅在收盘价 > N 日均线时持有（默认关闭）",
+    )
     parser.add_argument("--start-date", required=True, help="回测起始 YYYY-MM-DD")
     parser.add_argument("--end-date", help="回测终止 YYYY-MM-DD，省略=今天")
     parser.add_argument("--initial-capital", type=float, default=50_000)
@@ -130,6 +134,7 @@ def main() -> int:
             threshold=args.threshold,
             schedule=schedule,
             cooldown_days=args.cooldown_days,
+            trend_filter_ma=args.trend_filter_ma,
         )
     else:
         strategy = MomentumTopN(
@@ -141,6 +146,7 @@ def main() -> int:
             threshold=args.threshold,
             schedule=schedule,
             cooldown_days=args.cooldown_days,
+            trend_filter_ma=args.trend_filter_ma,
         )
 
     benchmark = args.benchmark.strip() or None
@@ -166,6 +172,7 @@ def main() -> int:
         "threshold": args.threshold,
         "schedule": args.schedule,
         "cooldownDays": args.cooldown_days,
+        "trendFilterMa": args.trend_filter_ma,
         "initialCapital": args.initial_capital,
         "commissionRate": args.commission_rate,
         "benchmark": benchmark,

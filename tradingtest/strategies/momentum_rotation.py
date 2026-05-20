@@ -67,6 +67,8 @@ class _MomentumStrategyMixinState:
     target_weights: Dict[str, float] = field(default_factory=dict)
     top_n: Optional[int] = None
     cash_buffer: float = 0.0
+    # 趋势过滤：只有当标的收盘价 > 自身 N 日均线时才允许持有（None=不过滤）
+    trend_ma: Optional[int] = None
     last_signal_reason: str = ""
     cooldown_remaining: int = 0
     # 内部：上次实际下单时使用的"目标签名"。同样的签名再算出来就不再下单。
@@ -125,6 +127,26 @@ class _MomentumBaseStrategy(bt.Strategy):
         closes = self._closes(data)
         return self._state.momentum_fn(closes, self._state.lookback)
 
+    def _trend_ok(self, data) -> bool:
+        """趋势过滤：收盘价 > 自身 N 日均线。未设置时恒为 True。"""
+        ma = self._state.trend_ma
+        if not ma:
+            return True
+        closes = self._closes(data)
+        if len(closes) < ma:
+            return False
+        sma = sum(closes[-ma:]) / ma
+        return closes[-1] > sma
+
+    def _apply_trend_filter(self, momentums: Dict[str, float]) -> Dict[str, float]:
+        """对未通过趋势过滤的标的，把动量置 NaN（=> 转现金）。"""
+        if not self._state.trend_ma:
+            return momentums
+        out: Dict[str, float] = {}
+        for name, m in momentums.items():
+            out[name] = m if self._trend_ok(self._feed_by_name[name]) else float("nan")
+        return out
+
     # ------------------------------------------------------------------
     def _target_weights(self) -> Dict[str, float]:
         """返回 {symbol: 目标权重}，子类实现。"""
@@ -162,7 +184,7 @@ class _MomentumBaseStrategy(bt.Strategy):
         if any(m != m for m in momentums.values()):  # NaN
             return
 
-        targets = self._compute_targets(momentums)
+        targets = self._compute_targets(self._apply_trend_filter(momentums))
         sig = self._signature(targets)
         if sig == self._state.last_target_signature:
             # 选中标的没变 → 不下单 (只让自然持仓涨跌)
@@ -218,7 +240,7 @@ class _MomentumBaseStrategy(bt.Strategy):
         momentums = {
             name: self._compute_momentum(feed) for name, feed in self._feed_by_name.items()
         }
-        targets = self._compute_targets(momentums)
+        targets = self._compute_targets(self._apply_trend_filter(momentums))
 
         positions = {}
         for name, feed in self._feed_by_name.items():

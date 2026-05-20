@@ -130,6 +130,7 @@ class MultiBacktestEngine:
             benchmark_data=benchmark_returns,
             benchmark_symbol=benchmark,
             risk_free_rate=risk_free_rate,
+            daily_returns_series=strat.analyzers.dailyret.get_analysis(),
         )
 
         final_value = cerebro.broker.getvalue()

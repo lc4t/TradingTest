@@ -32,20 +32,38 @@ class PerformanceAnalyzer:
         benchmark_data: Optional[Dict] = None,
         benchmark_symbol: Optional[str] = None,
         risk_free_rate: float = 0.03,
+        daily_returns_series: Optional[Dict] = None,
     ) -> Dict:
-        """计算所有性能指标"""
+        """计算所有性能指标.
+
+        ``daily_returns_series``: 可选的 ``{date: 当日组合收益率}``（通常来自
+        ``bt.analyzers.TimeReturn(timeframe=Days)``）。提供时，波动率 / 夏普 /
+        索提诺 / 年化收益 / Beta / Alpha 会基于"日度组合权益"计算，而不是稀疏的
+        交易间隔——后者在低频交易时会把多日收益当成单日，导致指标虚高。
+        """
         metrics = {}
 
         # 基础指标
         metrics["latest_nav"] = final_value / initial_capital
-        
-        # 先计算年化收益率
-        if trade_records:
+
+        # 年化收益率：优先用日度序列（更准），否则回退到日历天数法
+        if daily_returns_series:
+            daily_vals = np.array(list(daily_returns_series.values()), dtype=float)
+            daily_vals = daily_vals[~np.isnan(daily_vals)]
+            n = len(daily_vals)
+            if n > 1:
+                ann = (np.prod(1 + daily_vals) ** (252 / n) - 1) * 100
+                metrics["annual_return"] = ann
+                metrics["cagr"] = ann
+            else:
+                metrics["annual_return"] = 0
+                metrics["cagr"] = 0
+        elif trade_records:
             total_days = (trade_records[-1].date - trade_records[0].date).days + 1
             total_years = total_days / 365
             total_return = (final_value / initial_capital) - 1
             metrics["annual_return"] = ((1 + total_return) ** (1 / total_years) - 1) * 100
-            metrics["cagr"] = metrics["annual_return"]  # 复合年化增长率
+            metrics["cagr"] = metrics["annual_return"]
         else:
             metrics["annual_return"] = 0
             metrics["cagr"] = 0
@@ -62,12 +80,13 @@ class PerformanceAnalyzer:
 
         # 风险指标（传入年化收益率）
         risk_metrics = PerformanceAnalyzer._calculate_risk_metrics(
-            analyzers_results, 
+            analyzers_results,
             trade_records,
             metrics["annual_return"],  # 传入年化收益率
             benchmark_data=benchmark_data,
             benchmark_symbol=benchmark_symbol,
-            risk_free_rate=risk_free_rate
+            risk_free_rate=risk_free_rate,
+            daily_returns_series=daily_returns_series,
         )
         metrics.update(risk_metrics)
 
@@ -107,30 +126,40 @@ class PerformanceAnalyzer:
 
     @staticmethod
     def _calculate_risk_metrics(
-        analyzers_results: Dict, 
+        analyzers_results: Dict,
         trade_records: List[TradeRecord],
         annual_return: float,
         benchmark_data: Optional[Dict] = None,
         benchmark_symbol: Optional[str] = None,
-        risk_free_rate: float = 0.03
+        risk_free_rate: float = 0.03,
+        daily_returns_series: Optional[Dict] = None,
     ) -> Dict:
         """计算风险相关指标"""
         metrics = {}
-        
-        # 计算每日收益率序列
-        daily_returns = []
-        daily_pnl = []  # 添加每日盈亏金额序列
-        dates = []
-        for i in range(1, len(trade_records)):
-            prev_value = trade_records[i-1].total_value
-            curr_value = trade_records[i].total_value
-            daily_return = (curr_value / prev_value) - 1
-            daily_pnl.append(curr_value - prev_value)  # 计算每日盈亏金额
-            daily_returns.append(daily_return)
-            dates.append(trade_records[i].date.date())
-        
-        daily_returns = np.array(daily_returns)
-        daily_pnl = np.array(daily_pnl)
+
+        if daily_returns_series:
+            # 优先：用日度组合权益的收益率（准确的波动 / 夏普 / Beta）
+            dates = [
+                d.date() if hasattr(d, "date") else d
+                for d in daily_returns_series.keys()
+            ]
+            daily_returns = np.array(list(daily_returns_series.values()), dtype=float)
+            daily_pnl = np.array([])
+        else:
+            # 回退：交易间隔收益率（低频交易时会虚高，仅在没有日度序列时使用）
+            daily_returns = []
+            daily_pnl = []
+            dates = []
+            for i in range(1, len(trade_records)):
+                prev_value = trade_records[i - 1].total_value
+                curr_value = trade_records[i].total_value
+                daily_return = (curr_value / prev_value) - 1
+                daily_pnl.append(curr_value - prev_value)
+                daily_returns.append(daily_return)
+                dates.append(trade_records[i].date.date())
+
+            daily_returns = np.array(daily_returns)
+            daily_pnl = np.array(daily_pnl)
         
         # 计算波动率相关指标
         if len(daily_returns) > 0:

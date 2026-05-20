@@ -25,6 +25,10 @@ def _attach_analyzers(cerebro: bt.Cerebro) -> None:
     cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
     cerebro.addanalyzer(bt.analyzers.VWR, _name="vwr")
     cerebro.addanalyzer(bt.analyzers.SQN, _name="sqn")
+    # 日度组合收益率，用于准确的波动率 / 夏普 / Beta
+    cerebro.addanalyzer(
+        bt.analyzers.TimeReturn, _name="dailyret", timeframe=bt.TimeFrame.Days
+    )
 
 
 def _make_data_feed(data: pd.DataFrame) -> bt.feeds.PandasData:
@@ -171,6 +175,7 @@ class SingleBacktestEngine:
             benchmark_data=benchmark_returns,
             benchmark_symbol=benchmark,
             risk_free_rate=risk_free_rate,
+            daily_returns_series=strat.analyzers.dailyret.get_analysis(),
         )
 
         return build_report(
