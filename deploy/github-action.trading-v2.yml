@@ -116,4 +116,4 @@ jobs:
         working-directory: tradingtest/frontend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: yarn wrangler pages deploy out --project-name=trading
+        run: yarn wrangler pages deploy out --project-name=trading --branch=dev --commit-message="ci deploy" --commit-dirty=true
