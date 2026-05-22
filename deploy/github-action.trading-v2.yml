@@ -76,14 +76,14 @@ jobs:
             bash -c "
               cd /app && \
               echo '--- 补齐轮动标的历史 (non-fatal) ---' ; \
-              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 513100.SH || true ; \
-              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 518880.SH || true ; \
+              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 513100.SS || true ; \
+              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 518880.SS || true ; \
               uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 159915.SZ || true ; \
               echo '--- 动量轮动 Top-1 ---' ; \
               uv run python -m tradingtest.cli.rotation_backtest \
                 --strategy-id momentum-top1 \
                 --strategy-name '动量轮动 Top-1（创业板/纳指/黄金）' \
-                --universe 159915.SZ,513100.SH,518880.SH \
+                --universe 159915.SZ,513100.SS,518880.SS \
                 --top-n 1 --cash-buffer 0.05 \
                 --momentum-fn simple_return --lookback 23 --schedule daily \
                 --start-date 2022-01-01 --initial-capital 50000 \
