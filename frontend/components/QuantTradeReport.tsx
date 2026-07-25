@@ -464,12 +464,15 @@ function RecentTradesSection({ trades }: { trades: Trade[] }) {
     const multiplier = sortConfig.direction === 'asc' ? 1 : -1;
 
     if (sortConfig.key === 'date') {
-      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
-      if (dateDiff !== 0) return multiplier * dateDiff;
-      // 同一天的操作，不管日期列是升序还是降序，卖出永远排在买入前面——
-      // 先卖出腾出仓位，才能买入下一个标的，这个先后关系跟排序方向无关。
-      if (a.action !== b.action) return a.action === 'SELL' ? -1 : 1;
-      return 0;
+      // 轮动策略当天卖出旧仓位后立刻买入新仓位，同一天内卖出在前、买入在后——
+      // 给买入加 1ms 的虚拟偏移，让它在时间线上排在同一天的卖出"之后"。
+      // 这样无论按日期升序还是降序排，都是对同一个真实时间点排序，方向自洽：
+      // 升序时同一天先看到卖出、后看到买入；降序（默认）时先看到买入、后看到
+      // 卖出——买入正好和它自己"更早的那次卖出"（上一段持仓的卖出）连续，
+      // 于是列表天然按"同一标的的买入+卖出"两两分组，而不是按日期把不同标的的
+      // 买卖拼在一起。
+      const effectiveTime = (t: Trade) => new Date(t.date).getTime() + (t.action === 'BUY' ? 1 : 0);
+      return multiplier * (effectiveTime(a) - effectiveTime(b));
     }
 
     const aValue = a[sortConfig.key];
