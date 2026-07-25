@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Trading Test",
+  title: "Sakanano's 交易信号",
   description: "@sakanano, only for test.",
 };
 

@@ -135,20 +135,29 @@ export function rotationToTradeData(data: RotationData) {
       }
     : null
 
-  // 之前是每段轮动拆成 BUY/SELL 两行，按纯日期排序——同一段持仓的买卖相隔的是"持有天数"，
-  // 中间必然会插进别的标的的买卖（换仓当天：卖旧的+买新的同一天），看起来就像连续两次卖出，
-  // 容易误读成"同时持有多个标的"。改成一段轮动只出一行（入场→出场合并展示，跟单标的页面
-  // "卖出行下面挂着买入价"的既有样式一致），且额外补一行"当前持仓"的买入记录——不然还在
-  // 持有中的仓位永远不会出现在 rotations 里（那里只收录已经平仓的），交易记录里就看不到
-  // 最新一次买入。
+  // 买入、卖出各占一行（不合并成一行），标的名称+代码写进 reason 里保证一眼看出是哪个
+  // 标的；卖出行的 reason 回指"此前哪天买入、持有几天"，跟对应买入行做文字上的配对——
+  // 同一段持仓的买卖是 Top-1 轮动，中间不会插进第三个标的，天然是紧挨着的两行。
+  // 额外补一行"当前持仓"的买入记录——不然还在持有中的仓位永远不会出现在 rotations
+  // 里（那里只收录已经平仓的），交易记录里就看不到最新一次买入。
   const sortedRotations = [...data.rotations].sort(
     (a, b) => new Date(a.exitDate).getTime() - new Date(b.exitDate).getTime()
   )
   let runningTotal = data.summary.initialCapital
-  const recentTrades: RotationTradeRow[] = sortedRotations.map((r) => {
+  const recentTrades: RotationTradeRow[] = sortedRotations.flatMap((r) => {
     const label = `${resolveSymbolName(r.symbol)}（${r.symbol}）`
+    const buyRow: RotationTradeRow = {
+      date: r.entryDate,
+      action: "BUY",
+      price: r.entryPrice,
+      quantity: r.size,
+      value: r.entryPrice * r.size,
+      profitLoss: 0,
+      totalValue: runningTotal,
+      reason: `${label} 轮动买入`,
+    }
     runningTotal += r.pnl
-    return {
+    const sellRow: RotationTradeRow = {
       date: r.exitDate,
       action: "SELL",
       price: r.exitPrice,
@@ -157,9 +166,10 @@ export function rotationToTradeData(data: RotationData) {
       profitLoss: r.pnl,
       profitLossPercentage: r.periodReturnPct,
       totalValue: runningTotal,
-      reason: `${label} 轮动：${formatShortDate(r.entryDate)}买入 → 本次卖出（持有${r.holdingDays}天）`,
+      reason: `${label} 轮动卖出（${formatShortDate(r.entryDate)}买入，持有${r.holdingDays}天）`,
       entryPrice: r.entryPrice,
     }
+    return [buyRow, sellRow]
   })
   if (holding) {
     const label = `${heldName}（${holding.symbol}）`
