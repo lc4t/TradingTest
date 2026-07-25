@@ -314,6 +314,12 @@ function AnnualReturnsSection({ returns }: { returns: { year: number; value: num
   );
 }
 
+// 这些指标在后端存的都是"幅度"（正数），比如最大回撤=24.47 表示跌了24.47%。
+// 但幅度越大越糟，不该用"正数=绿色"的涨跌配色去读，展示时统一取负号 + 红色。
+const LOSS_MAGNITUDE_METRICS = ['最大回撤', '当前回撤', '最大亏损金额', '最大亏损比例', '平均亏损', 'VaR (95%置信度)'];
+// 波动率本身没有正负号意义（只有大小），不取负号，但也不该显示成绿色（波动大不是"赚了"）。
+const NEUTRAL_RISK_METRICS = ['波动率'];
+
 function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }) {
   if (!metrics || metrics.length === 0) return null;
 
@@ -348,12 +354,13 @@ function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }
     ];
 
     if (typeof value === 'number') {
+      const shown = LOSS_MAGNITUDE_METRICS.includes(metric.name) && value > 0 ? -value : value;
       if (percentageMetrics.includes(metric.name)) {
-        return `${value.toFixed(2)}%`;
+        return `${shown.toFixed(2)}%`;
       } else if (moneyMetrics.includes(metric.name)) {
-        return `¥${value.toFixed(2)}`;
+        return `¥${shown.toFixed(2)}`;
       } else if (ratioMetrics.includes(metric.name)) {
-        return value.toFixed(2);
+        return shown.toFixed(2);
       } else if (countMetrics.includes(metric.name)) {
         return value.toLocaleString();
       } else if (dayMetrics.includes(metric.name)) {
@@ -362,6 +369,17 @@ function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }
     }
 
     return value;
+  };
+
+  const colorClass = (metric: Metric) => {
+    if (typeof metric.value !== 'number') return '';
+    if (LOSS_MAGNITUDE_METRICS.includes(metric.name)) {
+      return metric.value !== 0 ? 'text-red-600' : '';
+    }
+    if (NEUTRAL_RISK_METRICS.includes(metric.name)) {
+      return '';
+    }
+    return metric.value > 0 ? 'text-green-600' : metric.value < 0 ? 'text-red-600' : '';
   };
 
   return (
@@ -375,11 +393,7 @@ function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }
             <div key={index} className="space-y-1">
               <div className="flex justify-between items-center">
                 <span className="font-medium">{metric.name}</span>
-                <span className={
-                  typeof metric.value === 'number'
-                    ? metric.value > 0 ? 'text-green-600' : metric.value < 0 ? 'text-red-600' : ''
-                    : ''
-                }>
+                <span className={colorClass(metric)}>
                   {formatValue(metric)}
                 </span>
               </div>

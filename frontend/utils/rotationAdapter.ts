@@ -78,6 +78,24 @@ function baseStrategyName(strategyName: string): string {
   return strategyName.split(/[（(]/)[0].trim() || strategyName
 }
 
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr.slice(0, 10))
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+interface RotationTradeRow {
+  date: string
+  action: "BUY" | "SELL"
+  price: number
+  quantity: number
+  value: number
+  profitLoss: number
+  profitLossPercentage?: number
+  totalValue: number
+  reason: string
+  entryPrice?: number
+}
+
 function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
   const holding = data.currentHolding
   if (holding && holding.since === data.reportDate) return "买入"
@@ -117,24 +135,20 @@ export function rotationToTradeData(data: RotationData) {
       }
     : null
 
+  // 之前是每段轮动拆成 BUY/SELL 两行，按纯日期排序——同一段持仓的买卖相隔的是"持有天数"，
+  // 中间必然会插进别的标的的买卖（换仓当天：卖旧的+买新的同一天），看起来就像连续两次卖出，
+  // 容易误读成"同时持有多个标的"。改成一段轮动只出一行（入场→出场合并展示，跟单标的页面
+  // "卖出行下面挂着买入价"的既有样式一致），且额外补一行"当前持仓"的买入记录——不然还在
+  // 持有中的仓位永远不会出现在 rotations 里（那里只收录已经平仓的），交易记录里就看不到
+  // 最新一次买入。
   const sortedRotations = [...data.rotations].sort(
     (a, b) => new Date(a.exitDate).getTime() - new Date(b.exitDate).getTime()
   )
   let runningTotal = data.summary.initialCapital
-  const recentTrades = sortedRotations.flatMap((r) => {
+  const recentTrades: RotationTradeRow[] = sortedRotations.map((r) => {
     const label = `${resolveSymbolName(r.symbol)}（${r.symbol}）`
-    const buyRow = {
-      date: r.entryDate,
-      action: "BUY",
-      price: r.entryPrice,
-      quantity: r.size,
-      value: r.entryPrice * r.size,
-      profitLoss: 0,
-      totalValue: runningTotal,
-      reason: `${label} 轮动买入`,
-    }
     runningTotal += r.pnl
-    const sellRow = {
+    return {
       date: r.exitDate,
       action: "SELL",
       price: r.exitPrice,
@@ -143,11 +157,23 @@ export function rotationToTradeData(data: RotationData) {
       profitLoss: r.pnl,
       profitLossPercentage: r.periodReturnPct,
       totalValue: runningTotal,
-      reason: `${label} 轮动卖出（持有${r.holdingDays}天）`,
+      reason: `${label} 轮动：${formatShortDate(r.entryDate)}买入 → 本次卖出（持有${r.holdingDays}天）`,
       entryPrice: r.entryPrice,
     }
-    return [buyRow, sellRow]
   })
+  if (holding) {
+    const label = `${heldName}（${holding.symbol}）`
+    recentTrades.push({
+      date: holding.since,
+      action: "BUY",
+      price: holding.entryPrice,
+      quantity: holding.size,
+      value: holding.entryPrice * holding.size,
+      profitLoss: 0,
+      totalValue: runningTotal + holding.unrealizedPnl,
+      reason: `${label} 轮动买入（持有中）`,
+    })
+  }
 
   return {
     symbol: data.strategyId,
