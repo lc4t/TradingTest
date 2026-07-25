@@ -59,10 +59,11 @@ jobs:
               ls -aslh data/rotation
             "
 
-      # ---- 主流程：统一切到 tradingtest-2.0.0.dev 镜像（放弃 toolbox-dev / tradingtest-1.0
+      # ---- 单标的回测：切到 tradingtest-2.0.0.dev 镜像（放弃 toolbox-dev / tradingtest-1.0
       #      两个旧镜像跑的 1.0 版单文件脚本，那套代码的 current_drawdown 计算有 bug，
-      #      永远读到 0）。参数原样保留自旧版，只是脚本调用换成新包的 CLI 模块 ----
-      - name: 容器内跑回测（单标的，2.0.0.dev 镜像）+ 推送日报
+      #      永远读到 0）。参数原样保留自旧版，只是脚本调用换成新包的 CLI 模块。
+      #      这一步只负责产出 data/*.json，不在这里推送日报 ----
+      - name: 容器内跑回测（单标的，2.0.0.dev 镜像）
         run: |
           set -e
           docker run --rm \
@@ -73,13 +74,6 @@ jobs:
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=${{ secrets.DB_PORT }} \
             -e DB_NAME=trading \
-            -e SMTP_SERVER=${{ secrets.SMTP_SERVER }} \
-            -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
-            -e SMTP_USERNAME=${{ secrets.SMTP_USERNAME }} \
-            -e SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
-            -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
-            -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
-            -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
             ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
             bash -c "
               date && cd /app && \
@@ -93,8 +87,30 @@ jobs:
               uv run python -m tradingtest.cli.backtest 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 6 --ma-long 30 --use-chandelier --chandelier-multiplier 2.5 --chandelier-period 38 --output-json data/0700.HK.json && \
               uv run python -m tradingtest.cli.backtest 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
               ls -aslh data && \
+              ls -aslh data/rotation
+            "
+
+      # ---- 推送日报：继续用 toolbox-dev 镜像（ToolBox 仓库 dev 分支）——它的
+      #      daily_signal_digest.py 比 TradingTest 里迁移过来的版本新，支持读取
+      #      data/rotation/*.json 汇总动量轮动信号、列表符号/分隔线排版等，
+      #      TradingTest 的 tradingtest.io.digest 还没跟上这些改动，如果直接拿它
+      #      推送会退化成没有轮动信号、排版更简陋的旧格式。两个镜像共用同一份
+      #      data/ 目录，谁产出 JSON 不影响谁来读它推送 ----
+      - name: 推送日报（toolbox-dev 镜像）
+        run: |
+          set -e
+          docker run --rm \
+            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/trading/data \
+            -e TZ=Asia/Shanghai \
+            -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
+            -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
+            -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
+            ghcr.io/lc4t/toolbox-dev:latest \
+            bash -c "
+              cd /app/trading && \
+              ls -aslh data && \
               ls -aslh data/rotation && \
-              uv run python -m tradingtest.cli.digest --data-dir data
+              uv run python daily_signal_digest.py --data-dir data
             "
 
       - name: 让 runner 拥有 data/ 文件
