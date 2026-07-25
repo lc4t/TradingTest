@@ -47,7 +47,7 @@ export interface RotationData {
     periodReturnPct: number
     pnl: number
   }>
-  annualReturns: Array<{ year: number; value: number }>
+  annualReturns: Array<{ year: number; value: number; bySymbol?: Record<string, number> }>
   metrics: {
     returnMetrics: Array<{ name: string; value: number | string; description?: string }>
     riskMetrics: Array<{ name: string; value: number | string; description?: string }>
@@ -94,6 +94,7 @@ interface RotationTradeRow {
   totalValue: number
   reason: string
   entryPrice?: number
+  symbol?: string
 }
 
 function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
@@ -155,6 +156,7 @@ export function rotationToTradeData(data: RotationData) {
       profitLoss: 0,
       totalValue: runningTotal,
       reason: `${label} 轮动买入`,
+      symbol: r.symbol,
     }
     runningTotal += r.pnl
     const sellRow: RotationTradeRow = {
@@ -168,6 +170,7 @@ export function rotationToTradeData(data: RotationData) {
       totalValue: runningTotal,
       reason: `${label} 轮动卖出（${formatShortDate(r.entryDate)}买入，持有${r.holdingDays}天）`,
       entryPrice: r.entryPrice,
+      symbol: r.symbol,
     }
     return [buyRow, sellRow]
   })
@@ -182,6 +185,7 @@ export function rotationToTradeData(data: RotationData) {
       profitLoss: 0,
       totalValue: runningTotal + holding.unrealizedPnl,
       reason: `${label} 轮动买入（持有中）`,
+      symbol: holding.symbol,
     })
   }
 
@@ -197,7 +201,15 @@ export function rotationToTradeData(data: RotationData) {
       price: holding ? holding.currentPrice : undefined,
     },
     positionInfo,
-    annualReturns: data.annualReturns,
+    annualReturns: data.annualReturns.map((r) => ({
+      year: r.year,
+      value: r.value,
+      bySymbol: r.bySymbol
+        ? Object.fromEntries(
+            Object.entries(r.bySymbol).map(([sym, v]) => [resolveSymbolName(sym), v])
+          )
+        : undefined,
+    })),
     returnMetrics: data.metrics.returnMetrics,
     riskMetrics: data.metrics.riskMetrics,
     riskAdjustedMetrics: data.metrics.riskAdjustedMetrics,

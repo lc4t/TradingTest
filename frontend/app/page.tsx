@@ -39,6 +39,7 @@ interface TradeData {
   annualReturns: Array<{
     year: number;
     value: number;
+    bySymbol?: Record<string, number>;
   }>;
   returnMetrics: Array<{
     name: string;
@@ -84,6 +85,7 @@ interface TradeData {
     profitLoss: number;
     totalValue: number;
     reason: string;
+    symbol?: string;
   }>;
   strategyParameters: Array<{
     name: string;

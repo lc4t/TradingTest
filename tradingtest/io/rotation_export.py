@@ -79,6 +79,42 @@ def _build_rotations(trades: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return rotations
 
 
+def _trade_year(t: Dict[str, Any]) -> int:
+    d = t["date"]
+    if isinstance(d, (datetime, date)):
+        return d.year
+    return datetime.fromisoformat(str(d)[:19]).year
+
+
+def _annual_returns_by_symbol(
+    trades_with_symbol: List[Dict[str, Any]],
+    universe: List[str],
+) -> Dict[int, Dict[str, float]]:
+    """按年度拆出每个标的对当年收益的贡献。
+
+    近似方法：标的当年已实现盈亏（SELL 才有非零 pnl）之和 / 年初组合净值，
+    与 ``PerformanceAnalyzer._calculate_yearly_returns`` 用的"年初净值"口径保持一致，
+    这样三个标的的贡献大致能加总回总的年度收益率（不完全相等，因为复利/手续费）。
+    """
+    sorted_trades = sorted(trades_with_symbol, key=lambda t: t["date"])
+    yearly_trades: Dict[int, List[Dict[str, Any]]] = {}
+    for t in sorted_trades:
+        yearly_trades.setdefault(_trade_year(t), []).append(t)
+
+    result: Dict[int, Dict[str, float]] = {}
+    for year, trades in yearly_trades.items():
+        start_value = trades[0]["total_value"] - trades[0]["pnl"]
+        if not start_value:
+            continue
+        contrib = {sym: 0.0 for sym in universe}
+        for t in trades:
+            sym = t.get("symbol")
+            if sym in contrib:
+                contrib[sym] += t.get("pnl", 0.0)
+        result[year] = {sym: round(pnl / start_value * 100, 3) for sym, pnl in contrib.items()}
+    return result
+
+
 def _date_diff(start: str, end: str) -> int:
     try:
         s = datetime.fromisoformat(str(start)[:19])
@@ -261,6 +297,7 @@ def format_rotation_for_json(
         trades_with_symbol.append({**t, "symbol": symbol})
 
     rotations = _build_rotations(trades_with_symbol)
+    annual_returns_by_symbol = _annual_returns_by_symbol(trades_with_symbol, universe)
 
     last_buys = [t for t in trades_with_symbol if t["action"] == "BUY"]
     last_buy = last_buys[-1] if last_buys else None
@@ -322,7 +359,11 @@ def format_rotation_for_json(
         "universeRanking": universe_ranking,
         "rotations": rotations,
         "annualReturns": [
-            {"year": int(y), "value": round(v, 3)}
+            {
+                "year": int(y),
+                "value": round(v, 3),
+                "bySymbol": annual_returns_by_symbol.get(int(y), {sym: 0.0 for sym in universe}),
+            }
             for y, v in (result.metrics.get("yearly_returns") or {}).items()
         ],
         "metrics": _key_metrics(result.metrics),

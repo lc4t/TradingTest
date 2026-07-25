@@ -276,7 +276,9 @@ class PerformanceAnalyzer:
             "sharpe_ratio": sharpe_ratio,
             "sortino_ratio": sortino,
             "max_drawdown": max_drawdown,
-            "current_drawdown": analyzers_results.get("drawdown", {}).get("current", {}).get("drawdown", 0) * 100,
+            # backtrader 的 DrawDown analyzer 把"当前回撤"放在顶层 drawdown 键，
+            # 不存在 "current" 这层嵌套——之前的写法永远命中 .get 默认值 0。
+            "current_drawdown": analyzers_results.get("drawdown", {}).get("drawdown", 0),
             "calmar_ratio": calmar_ratio,
             "volatility": volatility,
             "downside_vol": downside_vol,

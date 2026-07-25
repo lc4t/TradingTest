@@ -51,6 +51,7 @@ interface Trade {
   totalValue: number;
   reason: string;
   entryPrice?: number;
+  symbol?: string;
 }
 
 interface StrategyParameter {
@@ -65,7 +66,7 @@ interface QuantTradeReportProps {
   dateRange: { start: string; end: string };
   latestSignal: TradeSignal;
   positionInfo: PositionInfo | null;
-  annualReturns: { year: number; value: number }[];
+  annualReturns: { year: number; value: number; bySymbol?: Record<string, number> }[];
   returnMetrics: Metric[];
   riskMetrics: Metric[];
   riskAdjustedMetrics: Metric[];
@@ -271,7 +272,7 @@ function PositionInfoSection({ info, symbol }: { info: PositionInfo | null, symb
   );
 }
 
-function AnnualReturnsSection({ returns }: { returns: { year: number; value: number }[] }) {
+function AnnualReturnsSection({ returns }: { returns: { year: number; value: number; bySymbol?: Record<string, number> }[] }) {
   if (!returns || returns.length === 0) {
     return (
       <Card>
@@ -285,6 +286,12 @@ function AnnualReturnsSection({ returns }: { returns: { year: number; value: num
     );
   }
 
+  // 只有轮动策略的年度收益才带 bySymbol（每个标的当年贡献了多少）；
+  // 单标的策略的 bySymbol 是 undefined，此时不额外画标的列。
+  const symbolColumns = Array.from(
+    new Set(returns.flatMap((item) => (item.bySymbol ? Object.keys(item.bySymbol) : [])))
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -296,6 +303,9 @@ function AnnualReturnsSection({ returns }: { returns: { year: number; value: num
             <TableRow>
               <TableHead>年度</TableHead>
               <TableHead>收益率</TableHead>
+              {symbolColumns.map((sym) => (
+                <TableHead key={sym}>{sym}贡献</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -305,6 +315,14 @@ function AnnualReturnsSection({ returns }: { returns: { year: number; value: num
                 <TableCell className={item.value >= 0 ? 'text-green-600' : 'text-red-600'}>
                   {item.value >= 0 ? '+' : ''}{item.value.toFixed(2)}%
                 </TableCell>
+                {symbolColumns.map((sym) => {
+                  const v = item.bySymbol?.[sym] ?? 0;
+                  return (
+                    <TableCell key={sym} className={v >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      {v >= 0 ? '+' : ''}{v.toFixed(2)}%
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>
@@ -408,6 +426,23 @@ function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }
   );
 }
 
+// 轮动策略里同一个标的的买入/卖出行离得很远（中间总隔着别的标的），光看操作和
+// 原因文字不够直观。给每个标的算一个稳定的色相，同一标的的行背景色永远一致，
+// 一眼就能把跨行的买卖配对起来。用低透明度叠加色，这样在浅色/深色主题下都能
+// 跟底色自然融合，不用分别写两套颜色。
+function symbolHue(symbol: string): number {
+  let hash = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    hash = (hash * 31 + symbol.charCodeAt(i)) >>> 0;
+  }
+  return hash % 360;
+}
+
+function symbolRowStyle(symbol?: string): React.CSSProperties | undefined {
+  if (!symbol) return undefined;
+  return { backgroundColor: `hsla(${symbolHue(symbol)}, 65%, 50%, 0.12)` };
+}
+
 function RecentTradesSection({ trades }: { trades: Trade[] }) {
   const [showAllTrades, setShowAllTrades] = useState(false);
   const [sortConfig, setSortConfig] = useState<{
@@ -429,7 +464,12 @@ function RecentTradesSection({ trades }: { trades: Trade[] }) {
     const multiplier = sortConfig.direction === 'asc' ? 1 : -1;
 
     if (sortConfig.key === 'date') {
-      return multiplier * (new Date(a.date).getTime() - new Date(b.date).getTime());
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateDiff !== 0) return multiplier * dateDiff;
+      // 同一天的操作，不管日期列是升序还是降序，卖出永远排在买入前面——
+      // 先卖出腾出仓位，才能买入下一个标的，这个先后关系跟排序方向无关。
+      if (a.action !== b.action) return a.action === 'SELL' ? -1 : 1;
+      return 0;
     }
 
     const aValue = a[sortConfig.key];
@@ -522,7 +562,7 @@ function RecentTradesSection({ trades }: { trades: Trade[] }) {
             </TableHeader>
             <TableBody>
               {displayTrades.map((trade, index) => (
-                <TableRow key={index}>
+                <TableRow key={index} style={symbolRowStyle(trade.symbol)}>
                   <TableCell>{formatDate(trade.date)}</TableCell>
                   <TableCell>
                     <Badge variant={getVariant(trade.action)}>
