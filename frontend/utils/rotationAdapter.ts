@@ -78,12 +78,6 @@ function baseStrategyName(strategyName: string): string {
   return strategyName.split(/[（(]/)[0].trim() || strategyName
 }
 
-function daysHeld(sinceStr: string, reportDateStr: string): number {
-  const since = new Date(sinceStr.slice(0, 10)).getTime()
-  const reportDate = new Date(reportDateStr.slice(0, 10)).getTime()
-  return Math.max(0, Math.round((reportDate - since) / 86400000))
-}
-
 function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
   const holding = data.currentHolding
   if (holding && holding.since === data.reportDate) return "买入"
@@ -100,10 +94,11 @@ export function rotationToTradeData(data: RotationData) {
   const heldName = holding ? resolveSymbolName(holding.symbol, holding.name) : null
   const base = baseStrategyName(data.strategyName)
 
+  // 名字里不重复"持有/买入"这类动作词——徽章（action）已经说了一遍，这里只负责回答
+  // "持有的是谁"。入场日期、持有天数已经在下面的"当前持仓"卡片里有专门字段，不用再挤进标题。
   let displayName = `${base} · 空仓`
   if (holding) {
-    const days = daysHeld(holding.since, data.reportDate)
-    displayName = days === 0 ? `${base} · ${heldName}（今日买入）` : `${base} · ${heldName}（持有${days}天）`
+    displayName = `${base} · ${heldName}`
   } else {
     const soldToday = data.rotations.find((r) => r.exitDate === data.reportDate)
     if (soldToday) {

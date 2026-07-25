@@ -136,16 +136,6 @@ const normalizeAction = (action: string): "观察" | "卖出" | "买入" | "持�
 const normalizeData = (data: RawTradeData): TradeData => {
   const latestSignal = data.latestSignal || {};
 
-  // 如果有 price 字段但没有 prices 字段，创建一个默认的 prices 对象
-  if (latestSignal.price && !latestSignal.prices) {
-    latestSignal.prices = {
-      open: latestSignal.price,
-      close: latestSignal.price,
-      high: latestSignal.price,
-      low: latestSignal.price
-    };
-  }
-
   return {
     ...data,
     returnMetrics: data.returnMetrics || [],
