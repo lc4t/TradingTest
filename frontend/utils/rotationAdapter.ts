@@ -56,6 +56,22 @@ export interface RotationData {
   }
 }
 
+// rotation-v1 JSON 的 currentHolding.name / universeRanking.name 在没有配置 DB 名称查询时
+// 会直接回退成 symbol 本身（比如 "518880.SS"），页面上就看不出持有的到底是黄金 ETF 还是别的。
+// 轮动候选池固定且很小，这里直接兜底一份中文名，遇到 name === symbol 时用它替换。
+const KNOWN_SYMBOL_NAMES: Record<string, string> = {
+  "159915.SZ": "创业板ETF",
+  "513100.SS": "国泰纳斯达克100ETF",
+  "513100.SH": "国泰纳斯达克100ETF",
+  "518880.SS": "华安易富黄金ETF",
+  "518880.SH": "华安易富黄金ETF",
+}
+
+function resolveSymbolName(symbol: string, rawName?: string): string {
+  if (rawName && rawName !== symbol) return rawName
+  return KNOWN_SYMBOL_NAMES[symbol] || symbol
+}
+
 function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
   const holding = data.currentHolding
   if (holding && holding.since === data.reportDate) return "买入"
@@ -69,6 +85,7 @@ function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观�
 export function rotationToTradeData(data: RotationData) {
   const holding = data.currentHolding
   const action = todayAction(data)
+  const heldName = holding ? resolveSymbolName(holding.symbol, holding.name) : null
 
   const positionInfo = holding
     ? {
@@ -86,6 +103,7 @@ export function rotationToTradeData(data: RotationData) {
   )
   let runningTotal = data.summary.initialCapital
   const recentTrades = sortedRotations.flatMap((r) => {
+    const label = `${resolveSymbolName(r.symbol)}（${r.symbol}）`
     const buyRow = {
       date: r.entryDate,
       action: "BUY",
@@ -94,7 +112,7 @@ export function rotationToTradeData(data: RotationData) {
       value: r.entryPrice * r.size,
       profitLoss: 0,
       totalValue: runningTotal,
-      reason: "轮动买入",
+      reason: `${label} 轮动买入`,
     }
     runningTotal += r.pnl
     const sellRow = {
@@ -106,7 +124,7 @@ export function rotationToTradeData(data: RotationData) {
       profitLoss: r.pnl,
       profitLossPercentage: r.periodReturnPct,
       totalValue: runningTotal,
-      reason: `轮动卖出（持有${r.holdingDays}天）`,
+      reason: `${label} 轮动卖出（持有${r.holdingDays}天）`,
       entryPrice: r.entryPrice,
     }
     return [buyRow, sellRow]
@@ -114,12 +132,12 @@ export function rotationToTradeData(data: RotationData) {
 
   return {
     symbol: data.strategyId,
-    name: data.strategyName,
+    name: heldName ? `${data.strategyName} · ${heldName}` : `${data.strategyName} · 空仓`,
     reportDate: data.reportDate,
     dateRange: data.dateRange,
     latestSignal: {
       action,
-      asset: holding ? `${holding.name}(${holding.symbol})` : "空仓",
+      asset: holding ? `${heldName}（${holding.symbol}）` : "空仓",
       timestamp: data.reportDate,
       price: holding ? holding.currentPrice : undefined,
     },
