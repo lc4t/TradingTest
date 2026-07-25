@@ -72,6 +72,18 @@ function resolveSymbolName(symbol: string, rawName?: string): string {
   return KNOWN_SYMBOL_NAMES[symbol] || symbol
 }
 
+// 策略名里常年带着完整候选池，比如"动量轮动 Top-1（创业板/纳指/黄金）"——放进按钮/标题会很长，
+// 且候选池是固定配置，不是"现在持有什么"的答案。标题只保留策略名前缀，实际持仓另外拼出来。
+function baseStrategyName(strategyName: string): string {
+  return strategyName.split(/[（(]/)[0].trim() || strategyName
+}
+
+function daysHeld(sinceStr: string, reportDateStr: string): number {
+  const since = new Date(sinceStr.slice(0, 10)).getTime()
+  const reportDate = new Date(reportDateStr.slice(0, 10)).getTime()
+  return Math.max(0, Math.round((reportDate - since) / 86400000))
+}
+
 function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
   const holding = data.currentHolding
   if (holding && holding.since === data.reportDate) return "买入"
@@ -86,6 +98,18 @@ export function rotationToTradeData(data: RotationData) {
   const holding = data.currentHolding
   const action = todayAction(data)
   const heldName = holding ? resolveSymbolName(holding.symbol, holding.name) : null
+  const base = baseStrategyName(data.strategyName)
+
+  let displayName = `${base} · 空仓`
+  if (holding) {
+    const days = daysHeld(holding.since, data.reportDate)
+    displayName = days === 0 ? `${base} · ${heldName}（今日买入）` : `${base} · ${heldName}（持有${days}天）`
+  } else {
+    const soldToday = data.rotations.find((r) => r.exitDate === data.reportDate)
+    if (soldToday) {
+      displayName = `${base} · 已清仓${resolveSymbolName(soldToday.symbol)}`
+    }
+  }
 
   const positionInfo = holding
     ? {
@@ -132,7 +156,7 @@ export function rotationToTradeData(data: RotationData) {
 
   return {
     symbol: data.strategyId,
-    name: heldName ? `${data.strategyName} · ${heldName}` : `${data.strategyName} · 空仓`,
+    name: displayName,
     reportDate: data.reportDate,
     dateRange: data.dateRange,
     latestSignal: {
