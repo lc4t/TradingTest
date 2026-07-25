@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取 TradingTest 仓库（用于前端构建，含 /rotation 页面）
+      - name: 拉取 TradingTest 仓库（用于前端构建，单页站点）
         uses: actions/checkout@v4
         with:
           repository: lc4t/TradingTest
@@ -24,43 +24,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ---- 主流程：保持在已验证的 1.0 镜像上，行为零变化 ----
-      - name: 容器内跑回测（单标的，1.0 镜像）
-        run: |
-          set -e
-          mkdir -p tradingtest/frontend/data tradingtest/frontend/data/rotation
-          docker run --rm \
-            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
-            -e TZ=Asia/Shanghai \
-            -e DB_HOST=${{ secrets.DB_HOST }} \
-            -e DB_USER=${{ secrets.DB_USER }} \
-            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            -e DB_PORT=${{ secrets.DB_PORT }} \
-            -e DB_NAME=trading \
-            -e SMTP_SERVER=${{ secrets.SMTP_SERVER }} \
-            -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
-            -e SMTP_USERNAME=${{ secrets.SMTP_USERNAME }} \
-            -e SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
-            -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
-            -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
-            -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
-            ghcr.io/lc4t/tradingtest-1.0:latest \
-            bash -c "
-              date && cd /app && \
-              uv run python fetcher.py --start-date 2024-12-01 && \
-              uv run python backtest.py 513380.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 5  --ma-long 20 --use-chandelier --chandelier-multiplier 3.5 --chandelier-period 55 --output-json data/513380.SS.json && \
-              uv run python backtest.py 159915.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 19 --ma-long 26 --use-chandelier --chandelier-multiplier 3.6 --chandelier-period 20 --output-json data/159915.SZ.json && \
-              uv run python backtest.py 159941.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 18 --ma-long 25 --use-chandelier --chandelier-multiplier 3   --chandelier-period 55 --output-json data/159941.SZ.json && \
-              uv run python backtest.py 159869.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 21 --ma-long 26 --use-chandelier --chandelier-multiplier 1   --chandelier-period 38 --output-json data/159869.SZ.json && \
-              uv run python backtest.py 159665.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-12-22 --use-ma --ma-short 7  --ma-long 16 --use-chandelier --chandelier-multiplier 3   --chandelier-period 40 --output-json data/159665.SZ.json && \
-              uv run python backtest.py 588000.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2020-09-28 --use-ma --ma-short 6  --ma-long 15 --use-chandelier --chandelier-multiplier 1   --chandelier-period 80 --output-json data/588000.SS.json && \
-              uv run python backtest.py 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 30 --ma-long 55 --use-chandelier --chandelier-multiplier 2.1 --chandelier-period 30 --output-json data/0700.HK.json && \
-              uv run python backtest.py 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
-              ls -aslh data && \
-              uv run python daily_signal_digest.py --data-dir data
-            "
+      - name: 准备 data 目录
+        run: mkdir -p tradingtest/frontend/data tradingtest/frontend/data/rotation
 
-      # ---- 新增：动量轮动（2.0.0.dev 镜像，完全 non-fatal，挂了也不影响主流程） ----
+      # ---- 动量轮动（2.0.0.dev 镜像，完全 non-fatal，挂了也不影响主流程）----
+      # 必须先于下面的日报推送步骤跑，日报会读取 data/rotation/*.json 汇总当日轮动信号
       - name: 动量轮动回测（2.0.0.dev 镜像，non-fatal）
         continue-on-error: true
         run: |
@@ -89,6 +57,42 @@ jobs:
                 --start-date 2022-01-01 --initial-capital 50000 \
                 --output-json data/rotation/momentum-top1.json && \
               ls -aslh data/rotation
+            "
+
+      # ---- 主流程：保持在已验证的 1.0 镜像上，行为零变化，末尾的日报推送会一并汇总上面的轮动信号 ----
+      - name: 容器内跑回测（单标的，1.0 镜像）+ 推送日报
+        run: |
+          set -e
+          docker run --rm \
+            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -e TZ=Asia/Shanghai \
+            -e DB_HOST=${{ secrets.DB_HOST }} \
+            -e DB_USER=${{ secrets.DB_USER }} \
+            -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            -e DB_PORT=${{ secrets.DB_PORT }} \
+            -e DB_NAME=trading \
+            -e SMTP_SERVER=${{ secrets.SMTP_SERVER }} \
+            -e SMTP_PORT=${{ secrets.SMTP_PORT }} \
+            -e SMTP_USERNAME=${{ secrets.SMTP_USERNAME }} \
+            -e SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }} \
+            -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
+            -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
+            -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
+            ghcr.io/lc4t/tradingtest-1.0:latest \
+            bash -c "
+              date && cd /app && \
+              uv run python fetcher.py --start-date 2024-12-01 && \
+              uv run python backtest.py 513380.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 5  --ma-long 20 --use-chandelier --chandelier-multiplier 3.5 --chandelier-period 55 --output-json data/513380.SS.json && \
+              uv run python backtest.py 159915.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 19 --ma-long 26 --use-chandelier --chandelier-multiplier 3.6 --chandelier-period 20 --output-json data/159915.SZ.json && \
+              uv run python backtest.py 159941.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 18 --ma-long 25 --use-chandelier --chandelier-multiplier 3   --chandelier-period 55 --output-json data/159941.SZ.json && \
+              uv run python backtest.py 159869.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 21 --ma-long 26 --use-chandelier --chandelier-multiplier 1   --chandelier-period 38 --output-json data/159869.SZ.json && \
+              uv run python backtest.py 159665.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-12-22 --use-ma --ma-short 7  --ma-long 16 --use-chandelier --chandelier-multiplier 3   --chandelier-period 40 --output-json data/159665.SZ.json && \
+              uv run python backtest.py 588000.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2020-09-28 --use-ma --ma-short 6  --ma-long 15 --use-chandelier --chandelier-multiplier 1   --chandelier-period 80 --output-json data/588000.SS.json && \
+              uv run python backtest.py 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 30 --ma-long 55 --use-chandelier --chandelier-multiplier 2.1 --chandelier-period 30 --output-json data/0700.HK.json && \
+              uv run python backtest.py 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
+              ls -aslh data && \
+              ls -aslh data/rotation && \
+              uv run python daily_signal_digest.py --data-dir data
             "
 
       - name: 让 runner 拥有 data/ 文件

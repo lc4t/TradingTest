@@ -5,6 +5,7 @@ import QuantTradeReport from '../components/QuantTradeReport';
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { config } from '../utils/config';
+import { rotationToTradeData, type RotationData } from '../utils/rotationAdapter';
 
 // 定义交易数据类型
 interface TradeData {
@@ -190,15 +191,24 @@ export default function Home() {
     const loadTradeData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/trade-data');
-        if (!response.ok) {
-          throw new Error('Failed to fetch data');
-        }
-        const data = (await response.json()) as RawTradeData[];
-        if (!data || !Array.isArray(data) || data.length === 0) {
+        const [tradeRes, rotationRes] = await Promise.all([
+          fetch('/api/trade-data'),
+          fetch('/api/rotation-data'),
+        ]);
+
+        const rawTradeData = tradeRes.ok ? ((await tradeRes.json()) as RawTradeData[]) : [];
+        const rawRotationData = rotationRes.ok ? ((await rotationRes.json()) as RotationData[]) : [];
+
+        const normalizedTradeData = (Array.isArray(rawTradeData) ? rawTradeData : []).map(normalizeData);
+        const normalizedRotationData = (Array.isArray(rawRotationData) ? rawRotationData : []).map(
+          (r) => normalizeData(rotationToTradeData(r) as RawTradeData)
+        );
+
+        const combined = [...normalizedTradeData, ...normalizedRotationData];
+        if (combined.length === 0) {
           throw new Error('No data available');
         }
-        setTradeData(data.map(normalizeData));
+        setTradeData(combined);
       } catch (error) {
         console.error('Error loading trade data:', error);
         setError(error instanceof Error ? error.message : 'Failed to load data');

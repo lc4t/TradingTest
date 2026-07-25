@@ -315,6 +315,8 @@ function AnnualReturnsSection({ returns }: { returns: { year: number; value: num
 }
 
 function MetricsSection({ title, metrics }: { title: string; metrics: Metric[] }) {
+  if (!metrics || metrics.length === 0) return null;
+
   const formatValue = (metric: Metric) => {
     const value = metric.value;
 
@@ -398,6 +400,8 @@ function RecentTradesSection({ trades }: { trades: Trade[] }) {
     key: keyof Trade;
     direction: 'asc' | 'desc';
   }>({ key: 'date', direction: 'desc' });
+
+  if (!trades || trades.length === 0) return null;
 
   const getActionDisplay = (action: string) => {
     return action === 'BUY' ? '买入' : action === 'SELL' ? '卖出' : action;
