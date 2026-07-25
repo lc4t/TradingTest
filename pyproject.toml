@@ -55,7 +55,6 @@ target-version = "py313"
 [project.scripts]
 tt-backtest = "tradingtest.cli.backtest:main"
 tt-fetcher = "tradingtest.data.fetcher:main"
-tt-digest = "tradingtest.cli.digest:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

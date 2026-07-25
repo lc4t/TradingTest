@@ -21,7 +21,7 @@
 │   ├── strategies/             # base / signals / dual_ma / momentum / momentum_rotation
 │   ├── engine/                 # single / multi / sweep
 │   ├── analysis/               # metrics / report
-│   ├── io/                     # notify / digest / json_export / csv_export
+│   ├── io/                     # notify / json_export / csv_export / rotation_export
 │   ├── cli/                    # argparse 入口
 │   └── templates/              # Jinja2 报告模板
 ├── notebooks/quickstart.ipynb  # Jupyter 示例
@@ -33,8 +33,13 @@
 └── .github/workflows/          # CI: 构建并推送 Docker 镜像
 ```
 
-> 根目录的 `backtest.py` / `fetcher.py` / `daily_signal_digest.py` 是 **向后兼容 shim**——
+> 根目录的 `backtest.py` / `fetcher.py` 是 **向后兼容 shim**——
 > 老的工作流命令仍能直接使用，内部转发到 `tradingtest.cli.*`。
+>
+> 每日信号汇总 + PushGo 推送不在这个包里：那部分逻辑功能更新、格式更完整的版本
+> 一直在 ToolBox 仓库的 `trading/daily_signal_digest.py`（`toolbox-dev` 镜像），
+> 生产的 `trading-v2.yml` 用它来推送日报，回测本身仍然用这个仓库的
+> `tradingtest-2.0.0.dev` 镜像。
 
 ## 安装
 
@@ -58,9 +63,6 @@ uv run python -m tradingtest.cli.backtest 159915.SZ \
   --use-ma --ma-short 5 --ma-long 8 \
   --use-chandelier --chandelier-multiplier 1.5 --chandelier-period 15 \
   --output-json data/159915.SZ.json
-
-# 当日信号汇总
-uv run python -m tradingtest.cli.digest --data-dir data
 ```
 
 ## 交互式 API（2.0 新增）
@@ -160,7 +162,7 @@ ghcr.io/lc4t/tradingtest-<branch>:latest
 | ---- | ---- |
 | `/app/tradingtest/` | 全部 Python 源码（包） |
 | `/app/.venv/` | 构建时安装好的虚拟环境 |
-| `/app/{backtest,fetcher,daily_signal_digest}.py` | 向后兼容的 CLI shim |
+| `/app/{backtest,fetcher}.py` | 向后兼容的 CLI shim |
 | ~~`/app/frontend/`~~ | **不打入镜像**——前端独立部署 |
 
 ## 测试
