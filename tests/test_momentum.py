@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from tradingtest.strategies.momentum import (
+from trading.strategies.momentum import (
     MOMENTUM_FUNCTIONS,
     Schedule,
     dual_12_1,

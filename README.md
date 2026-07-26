@@ -1,4 +1,4 @@
-# TradingTest
+# Trading
 
 量化交易工具集：**行情数据同步** + **策略回测**，配有一个独立部署的 Next.js 前端。
 
@@ -6,7 +6,7 @@
 
 ## 内置策略
 
-- **双均线 + 吊灯/ADR 止损**（1.0 版即有，单标的）—— 见 [`tradingtest/strategies/dual_ma.py`](tradingtest/strategies/dual_ma.py)
+- **双均线 + 吊灯/ADR 止损**（1.0 版即有，单标的）—— 见 [`trading/strategies/dual_ma.py`](trading/strategies/dual_ma.py)
 - **动量轮动**（2.0 新增，多标的）—— 两个变体：
   - `MomentumBasket`：用户为每个候选标的预设目标权重，动量过阈值的留，其余转现金。
   - `MomentumTopN`：每期取动量最强的 N 个，等权持有。
@@ -15,7 +15,7 @@
 
 ```
 .
-├── tradingtest/                # Python 包
+├── trading/                # Python 包
 │   ├── api.py                  # 用户态门面 run_backtest / MomentumBasket / ...
 │   ├── data/                   # 数据仓库（MySQL）+ fetcher
 │   ├── strategies/             # base / signals / dual_ma / momentum / momentum_rotation
@@ -34,7 +34,7 @@
 ```
 
 > 根目录的 `backtest.py` / `fetcher.py` 是 **向后兼容 shim**——
-> 老的工作流命令仍能直接使用，内部转发到 `tradingtest.cli.*`。
+> 老的工作流命令仍能直接使用，内部转发到 `trading.cli.*`。
 
 ## 安装
 
@@ -49,10 +49,10 @@ cp .env.example .env   # 按需填入 DB / SMTP / PushGo
 
 ```bash
 # 同步历史行情
-uv run python -m tradingtest.cli.fetcher --start-date 2024-12-01
+uv run python -m trading.cli.fetcher --start-date 2024-12-01
 
 # 单标的回测（双均线 + 吊灯）
-uv run python -m tradingtest.cli.backtest 159915.SZ \
+uv run python -m trading.cli.backtest 159915.SZ \
   --initial-capital 50000 \
   --start-date 2022-01-01 \
   --use-ma --ma-short 5 --ma-long 8 \
@@ -74,7 +74,7 @@ PUSHGO_URL=https://gateway.pushgo.dev/push
 ```
 
 ```bash
-uv run python -m tradingtest.cli.digest --data-dir frontend/data
+uv run python -m trading.cli.digest --data-dir frontend/data
 ```
 
 可选参数：
@@ -94,7 +94,7 @@ uv run python -m tradingtest.cli.digest --data-dir frontend/data
 ## 交互式 API（2.0 新增）
 
 ```python
-from tradingtest import run_backtest, MomentumBasket, MomentumTopN, Schedule
+from trading import run_backtest, MomentumBasket, MomentumTopN, Schedule
 
 # 加权篮子
 result = run_backtest(
@@ -175,8 +175,8 @@ result.plot()         # → matplotlib figure
 后端镜像由 [.github/workflows/docker-build.yml](.github/workflows/docker-build.yml) 自动构建并推送到 GHCR：
 
 ```
-ghcr.io/lc4t/tradingtest-<branch>:<short-sha>
-ghcr.io/lc4t/tradingtest-<branch>:latest
+ghcr.io/lc4t/trading-<branch>:<short-sha>
+ghcr.io/lc4t/trading-<branch>:latest
 ```
 
 - `main` / `1.0` / `2.0.0.dev`  三个分支都会自动构建。
@@ -186,7 +186,7 @@ ghcr.io/lc4t/tradingtest-<branch>:latest
 
 | 路径 | 内容 |
 | ---- | ---- |
-| `/app/tradingtest/` | 全部 Python 源码（包） |
+| `/app/trading/` | 全部 Python 源码（包） |
 | `/app/.venv/` | 构建时安装好的虚拟环境 |
 | `/app/{backtest,fetcher}.py` | 向后兼容的 CLI shim |
 | ~~`/app/frontend/`~~ | **不打入镜像**——前端独立部署 |
@@ -195,7 +195,7 @@ ghcr.io/lc4t/tradingtest-<branch>:latest
 
 ```bash
 uv run pytest
-uv run pytest --cov=tradingtest --cov-report=term-missing
+uv run pytest --cov=trading --cov-report=term-missing
 ```
 
 ## 路线图

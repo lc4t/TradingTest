@@ -2,7 +2,7 @@
 
 示例:
 
-    uv run python -m tradingtest.cli.digest --data-dir frontend/data
+    uv run python -m trading.cli.digest --data-dir frontend/data
 """
 from __future__ import annotations
 

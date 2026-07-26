@@ -23,7 +23,7 @@ jobs:
       - name: Set image vars
         id: vars
         run: |
-          REPO_NAME=tradingtest
+          REPO_NAME=trading
           BRANCH_NAME=${GITHUB_REF_NAME}
           SHORT_HASH=$(git rev-parse --short HEAD)
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')

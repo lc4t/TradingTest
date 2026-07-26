@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 拉取 TradingTest 仓库（用于前端构建，单页站点）
+      - name: 拉取 trading 仓库（用于前端构建，单页站点）
         uses: actions/checkout@v4
         with:
-          repository: lc4t/TradingTest
+          repository: lc4t/trading
           ref: "2.0.0.dev"
-          path: tradingtest
+          path: trading
 
       - name: 登录 GHCR
         uses: docker/login-action@v3
@@ -25,7 +25,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 准备 data 目录
-        run: mkdir -p tradingtest/frontend/data tradingtest/frontend/data/rotation
+        run: mkdir -p trading/frontend/data trading/frontend/data/rotation
 
       # ---- 动量轮动（2.0.0.dev 镜像，完全 non-fatal，挂了也不影响主流程）----
       # 必须先于下面的日报推送步骤跑，日报会读取 data/rotation/*.json 汇总当日轮动信号
@@ -33,22 +33,22 @@ jobs:
         continue-on-error: true
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -v ${{ github.workspace }}/trading/frontend/data:/app/data \
             -e TZ=Asia/Shanghai \
             -e DB_HOST=${{ secrets.DB_HOST }} \
             -e DB_USER=${{ secrets.DB_USER }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=${{ secrets.DB_PORT }} \
             -e DB_NAME=trading \
-            ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0.0.dev:latest \
             bash -c "
               cd /app && \
               echo '--- 补齐轮动标的历史 (non-fatal) ---' ; \
-              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 513100.SS || true ; \
-              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 518880.SS || true ; \
-              uv run python -m tradingtest.cli.fetcher --start-date 2021-09-01 --symbol 159915.SZ || true ; \
+              uv run python -m trading.cli.fetcher --start-date 2021-09-01 --symbol 513100.SS || true ; \
+              uv run python -m trading.cli.fetcher --start-date 2021-09-01 --symbol 518880.SS || true ; \
+              uv run python -m trading.cli.fetcher --start-date 2021-09-01 --symbol 159915.SZ || true ; \
               echo '--- 动量轮动 Top-1 ---' ; \
-              uv run python -m tradingtest.cli.rotation_backtest \
+              uv run python -m trading.cli.rotation_backtest \
                 --strategy-id momentum-top1 \
                 --strategy-name '动量轮动 Top-1（创业板/纳指/黄金）' \
                 --universe 159915.SZ,513100.SS,518880.SS \
@@ -59,7 +59,7 @@ jobs:
               ls -aslh data/rotation
             "
 
-      # ---- 单标的回测：切到 tradingtest-2.0.0.dev 镜像（放弃 toolbox-dev / tradingtest-1.0
+      # ---- 单标的回测：切到 trading-2.0.0.dev 镜像（放弃 toolbox-dev / trading-1.0
       #      两个旧镜像跑的 1.0 版单文件脚本，那套代码的 current_drawdown 计算有 bug，
       #      永远读到 0）。参数原样保留自旧版，只是脚本调用换成新包的 CLI 模块。
       #      这一步只负责产出 data/*.json，不在这里推送日报 ----
@@ -67,61 +67,61 @@ jobs:
         run: |
           set -e
           docker run --rm \
-            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -v ${{ github.workspace }}/trading/frontend/data:/app/data \
             -e TZ=Asia/Shanghai \
             -e DB_HOST=${{ secrets.DB_HOST }} \
             -e DB_USER=${{ secrets.DB_USER }} \
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=${{ secrets.DB_PORT }} \
             -e DB_NAME=trading \
-            ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0.0.dev:latest \
             bash -c "
               date && cd /app && \
-              uv run python -m tradingtest.cli.fetcher --start-date 2024-12-01 && \
-              uv run python -m tradingtest.cli.backtest 513380.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 5  --ma-long 20 --use-chandelier --chandelier-multiplier 3.5 --chandelier-period 55 --output-json data/513380.SS.json && \
-              uv run python -m tradingtest.cli.backtest 159915.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 19 --ma-long 26 --use-chandelier --chandelier-multiplier 3.6 --chandelier-period 20 --output-json data/159915.SZ.json && \
-              uv run python -m tradingtest.cli.backtest 159941.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 18 --ma-long 25 --use-chandelier --chandelier-multiplier 3   --chandelier-period 55 --output-json data/159941.SZ.json && \
-              uv run python -m tradingtest.cli.backtest 159869.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 21 --ma-long 26 --use-chandelier --chandelier-multiplier 1   --chandelier-period 38 --output-json data/159869.SZ.json && \
-              uv run python -m tradingtest.cli.backtest 159665.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-12-22 --use-ma --ma-short 7  --ma-long 16 --use-chandelier --chandelier-multiplier 3   --chandelier-period 40 --output-json data/159665.SZ.json && \
-              uv run python -m tradingtest.cli.backtest 588000.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2020-09-28 --use-ma --ma-short 6  --ma-long 15 --use-chandelier --chandelier-multiplier 1   --chandelier-period 80 --output-json data/588000.SS.json && \
-              uv run python -m tradingtest.cli.backtest 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 6 --ma-long 30 --use-chandelier --chandelier-multiplier 2.5 --chandelier-period 38 --output-json data/0700.HK.json && \
-              uv run python -m tradingtest.cli.backtest 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
+              uv run python -m trading.cli.fetcher --start-date 2024-12-01 && \
+              uv run python -m trading.cli.backtest 513380.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 5  --ma-long 20 --use-chandelier --chandelier-multiplier 3.5 --chandelier-period 55 --output-json data/513380.SS.json && \
+              uv run python -m trading.cli.backtest 159915.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 19 --ma-long 26 --use-chandelier --chandelier-multiplier 3.6 --chandelier-period 20 --output-json data/159915.SZ.json && \
+              uv run python -m trading.cli.backtest 159941.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 18 --ma-long 25 --use-chandelier --chandelier-multiplier 3   --chandelier-period 55 --output-json data/159941.SZ.json && \
+              uv run python -m trading.cli.backtest 159869.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-01-01 --use-ma --ma-short 21 --ma-long 26 --use-chandelier --chandelier-multiplier 1   --chandelier-period 38 --output-json data/159869.SZ.json && \
+              uv run python -m trading.cli.backtest 159665.SZ --benchmark 000300.SS --initial-capital 50000 --start-date 2022-12-22 --use-ma --ma-short 7  --ma-long 16 --use-chandelier --chandelier-multiplier 3   --chandelier-period 40 --output-json data/159665.SZ.json && \
+              uv run python -m trading.cli.backtest 588000.SS --benchmark 000300.SS --initial-capital 50000 --start-date 2020-09-28 --use-ma --ma-short 6  --ma-long 15 --use-chandelier --chandelier-multiplier 1   --chandelier-period 80 --output-json data/588000.SS.json && \
+              uv run python -m trading.cli.backtest 0700.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2019-01-01 --use-ma --ma-short 6 --ma-long 30 --use-chandelier --chandelier-multiplier 2.5 --chandelier-period 38 --output-json data/0700.HK.json && \
+              uv run python -m trading.cli.backtest 9626.HK   --benchmark ^HSI       --initial-capital 50000 --start-date 2021-03-29 --use-ma --ma-short 22 --ma-long 37 --use-chandelier --chandelier-multiplier 2.2 --chandelier-period 35 --output-json data/9626.HK.json && \
               ls -aslh data && \
               ls -aslh data/rotation
             "
 
-      # ---- 推送日报：daily_signal_digest.py 已经完整迁移进 tradingtest.io.digest
+      # ---- 推送日报：daily_signal_digest.py 已经完整迁移进 trading.io.digest
       #      （含轮动信号汇总、列表符号/分隔线排版等），不再需要 ToolBox 的
-      #      toolbox-dev 镜像，直接复用上面已经拉起来的 tradingtest-2.0.0.dev ----
-      - name: 推送日报（tradingtest 镜像）
+      #      toolbox-dev 镜像，直接复用上面已经拉起来的 trading-2.0.0.dev ----
+      - name: 推送日报（trading 镜像）
         run: |
           set -e
           docker run --rm \
-            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
+            -v ${{ github.workspace }}/trading/frontend/data:/app/data \
             -e TZ=Asia/Shanghai \
             -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
             -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
             -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
-            ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0.0.dev:latest \
             bash -c "
               cd /app && \
               ls -aslh data && \
               ls -aslh data/rotation && \
-              uv run python -m tradingtest.cli.digest --data-dir data
+              uv run python -m trading.cli.digest --data-dir data
             "
 
       - name: 让 runner 拥有 data/ 文件
-        run: sudo chown -R "$USER":"$USER" tradingtest/frontend/data
+        run: sudo chown -R "$USER":"$USER" trading/frontend/data
 
       - name: 配置 Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: yarn
-          cache-dependency-path: tradingtest/frontend/yarn.lock
+          cache-dependency-path: trading/frontend/yarn.lock
 
       - name: 构建前端
-        working-directory: tradingtest/frontend
+        working-directory: trading/frontend
         env:
           NEXT_PUBLIC_GA_ID: G-59PSJW48XQ
         run: |
@@ -132,7 +132,7 @@ jobs:
           yarn build
 
       - name: 部署到 Cloudflare Pages
-        working-directory: tradingtest/frontend
+        working-directory: trading/frontend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: yarn wrangler pages deploy out --project-name=trading --branch=dev --commit-message="ci deploy" --commit-dirty=true

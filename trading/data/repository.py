@@ -28,7 +28,7 @@ from sqlalchemy.sql import func, text
 load_dotenv()
 
 # 数据库配置从环境读取，但延迟到 DBClient 实例化时才校验
-# （让 `import tradingtest` 在没有 .env 的环境也能成功）
+# （让 `import trading` 在没有 .env 的环境也能成功）
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_USER = os.getenv("DB_USER", "root")

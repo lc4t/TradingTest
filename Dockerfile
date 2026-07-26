@@ -25,7 +25,7 @@ RUN uv sync --no-dev --frozen --no-install-project
 
 # Copy the rest of the backend
 COPY . .
-# Install the tradingtest package itself now that source is in place.
+# Install the trading package itself now that source is in place.
 RUN uv sync --no-dev --frozen
 
 # The frontend is deployed separately; keep the image lean.

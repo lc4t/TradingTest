@@ -19,8 +19,8 @@ import yfinance as yf
 from loguru import logger
 from tabulate import tabulate
 
-from tradingtest.strategies.momentum import Schedule, resolve_momentum_fn
-from tradingtest.strategies.momentum_rotation import (
+from trading.strategies.momentum import Schedule, resolve_momentum_fn
+from trading.strategies.momentum_rotation import (
     MomentumTopNStrategy,
     _MomentumStrategyMixinState,
 )

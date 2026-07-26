@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault("DB_PASSWORD", "unused")
 os.environ.setdefault("DB_NAME", "unused")
 
-from tradingtest.data.repository import DBClient  # noqa: E402
+from trading.data.repository import DBClient  # noqa: E402
 
 
 def make_record(**overrides):

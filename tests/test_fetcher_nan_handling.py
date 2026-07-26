@@ -9,7 +9,7 @@ os.environ.setdefault("DB_NAME", "unused")
 
 import pandas as pd
 
-from tradingtest.data.fetcher import ADataFetcher  # noqa: E402
+from trading.data.fetcher import ADataFetcher  # noqa: E402
 
 
 class ADataFetcherNanHandlingTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class ADataFetcherNanHandlingTests(unittest.TestCase):
             ]
         )
 
-        with mock.patch("tradingtest.data.fetcher.adata.fund.market.get_market_etf", return_value=df):
+        with mock.patch("trading.data.fetcher.adata.fund.market.get_market_etf", return_value=df):
             result = ADataFetcher().fetch_data("159665.SZ", "2026-07-01", "2026-07-25")
 
         self.assertEqual(len(result), 1)
@@ -64,7 +64,7 @@ class ADataFetcherNanHandlingTests(unittest.TestCase):
             ]
         )
 
-        with mock.patch("tradingtest.data.fetcher.adata.fund.market.get_market_etf", return_value=df):
+        with mock.patch("trading.data.fetcher.adata.fund.market.get_market_etf", return_value=df):
             result = ADataFetcher().fetch_data("159665.SZ", "2026-07-01", "2026-07-25")
 
         record = result[0]

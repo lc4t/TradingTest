@@ -1,9 +1,9 @@
-"""TradingTest — 量化交易数据同步与回测工具集.
+"""trading — 量化交易数据同步与回测工具集.
 
 公共 API:
 
-    from tradingtest import DBClient, SingleBacktestEngine
-    from tradingtest.strategies.dual_ma import DualMAStrategy
+    from trading import DBClient, SingleBacktestEngine
+    from trading.strategies.dual_ma import DualMAStrategy
 
 后续 2.0 会加入 `run_backtest()` facade + 动量策略。
 """

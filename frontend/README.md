@@ -1,6 +1,6 @@
-# TradingTest Frontend
+# Trading Frontend
 
-Static Next.js dashboard for the TradingTest backend. Built with `output: 'export'` so it can be
+Static Next.js dashboard for the Trading backend. Built with `output: 'export'` so it can be
 hosted on Cloudflare Pages (or any static host).
 
 ## Local dev

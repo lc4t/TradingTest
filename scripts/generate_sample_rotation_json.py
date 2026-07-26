@@ -15,12 +15,12 @@ import pandas as pd
 import yfinance as yf
 from loguru import logger
 
-from tradingtest.analysis.metrics import PerformanceAnalyzer
-from tradingtest.analysis.report import trade_record_to_dict
-from tradingtest.engine.multi import MultiBacktestResult
-from tradingtest.io.rotation_export import format_rotation_for_json
-from tradingtest.strategies.momentum import Schedule, resolve_momentum_fn
-from tradingtest.strategies.momentum_rotation import (
+from trading.analysis.metrics import PerformanceAnalyzer
+from trading.analysis.report import trade_record_to_dict
+from trading.engine.multi import MultiBacktestResult
+from trading.io.rotation_export import format_rotation_for_json
+from trading.strategies.momentum import Schedule, resolve_momentum_fn
+from trading.strategies.momentum_rotation import (
     MomentumTopNStrategy,
     _MomentumStrategyMixinState,
 )

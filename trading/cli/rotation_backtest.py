@@ -2,7 +2,7 @@
 
 示例:
 
-    uv run python -m tradingtest.cli.rotation_backtest \
+    uv run python -m trading.cli.rotation_backtest \
         --strategy-id momentum-top1 \
         --strategy-name "动量轮动 Top-1" \
         --universe 159915.SZ,513100.SH,518880.SH \

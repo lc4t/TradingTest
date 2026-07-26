@@ -1,6 +1,6 @@
 """用户态门面：在 Notebook / REPL / 脚本里只需要 import 这一个模块.
 
->>> from tradingtest.api import run_backtest, MomentumBasket
+>>> from trading.api import run_backtest, MomentumBasket
 >>> result = run_backtest(
 ...     strategy=MomentumBasket(
 ...         weights={"159915.SZ": 0.4, "513100.SH": 0.4, "518880.SH": 0.2},

@@ -1,7 +1,7 @@
 """api.py 的策略 spec 校验测试（不触发实际回测）。"""
 import pytest
 
-from tradingtest.api import MomentumBasket, MomentumTopN
+from trading.api import MomentumBasket, MomentumTopN
 
 
 class TestMomentumBasketSpec:

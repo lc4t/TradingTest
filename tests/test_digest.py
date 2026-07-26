@@ -1,4 +1,4 @@
-"""tradingtest.io.digest / tradingtest.cli.digest 测试。"""
+"""trading.io.digest / trading.cli.digest 测试。"""
 import io
 import json
 import tempfile
@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest import mock
 from urllib import error
 
-from tradingtest.cli import digest as digest_cli
-from tradingtest.io import digest
+from trading.cli import digest as digest_cli
+from trading.io import digest
 
 
 def make_report(symbol: str, name: str, report_date: str, action: str, **overrides):
@@ -469,7 +469,7 @@ class MainTests(unittest.TestCase):
             stdout = io.StringIO()
             stderr = io.StringIO()
             argv = [
-                "tradingtest.cli.digest",
+                "trading.cli.digest",
                 "--data-dir",
                 temp_dir,
                 "--date",
