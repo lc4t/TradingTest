@@ -7,7 +7,7 @@ packages = ["trading"]
 
 [project]
 name = "trading"
-version = "2.0.0.dev0"
+version = "2.0.0"
 description = "Quantitative trading data sync and backtesting toolkit"
 readme = "README.md"
 requires-python = ">=3.13"

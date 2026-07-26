@@ -179,8 +179,8 @@ ghcr.io/lc4t/trading-<branch>:<short-sha>
 ghcr.io/lc4t/trading-<branch>:latest
 ```
 
-- `main` / `1.0` / `2.0.0.dev`  三个分支都会自动构建。
-- 1.0 是当前稳定分支；2.0.0.dev 在开发中。
+- `main` / `1.0` / `2.0`  三个分支都会自动构建。
+- `2.0` 是当前默认/稳定分支；`1.0` 是旧版，只做归档。
 
 ### 镜像内布局
 
@@ -201,8 +201,7 @@ uv run pytest --cov=trading --cov-report=term-missing
 ## 路线图
 
 - [x] 1.0：双均线策略 + 参数寻优
-- [x] 2.0.0.dev：动量轮动（MomentumBasket / MomentumTopN）+ 用户态 API + Jupyter
-- [ ] 2.0：上线后停留为稳定版
+- [x] 2.0：动量轮动（MomentumBasket / MomentumTopN）+ 用户态 API + Jupyter，已成为默认分支
 - [ ] 后续：更多策略（趋势 / 反转 / 配对交易），更丰富的资金管理
 
 ## License

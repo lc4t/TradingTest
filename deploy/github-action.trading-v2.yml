@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: lc4t/trading
-          ref: "2.0.0.dev"
+          ref: "2.0"
           path: trading
 
       - name: 登录 GHCR
@@ -27,9 +27,9 @@ jobs:
       - name: 准备 data 目录
         run: mkdir -p trading/frontend/data trading/frontend/data/rotation
 
-      # ---- 动量轮动（2.0.0.dev 镜像，完全 non-fatal，挂了也不影响主流程）----
+      # ---- 动量轮动（2.0 镜像，完全 non-fatal，挂了也不影响主流程）----
       # 必须先于下面的日报推送步骤跑，日报会读取 data/rotation/*.json 汇总当日轮动信号
-      - name: 动量轮动回测（2.0.0.dev 镜像，non-fatal）
+      - name: 动量轮动回测（2.0 镜像，non-fatal）
         continue-on-error: true
         run: |
           docker run --rm \
@@ -40,7 +40,7 @@ jobs:
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=${{ secrets.DB_PORT }} \
             -e DB_NAME=trading \
-            ghcr.io/lc4t/trading-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0:latest \
             bash -c "
               cd /app && \
               echo '--- 补齐轮动标的历史 (non-fatal) ---' ; \
@@ -59,11 +59,11 @@ jobs:
               ls -aslh data/rotation
             "
 
-      # ---- 单标的回测：切到 trading-2.0.0.dev 镜像（放弃 toolbox-dev / trading-1.0
+      # ---- 单标的回测：切到 trading-2.0 镜像（放弃 toolbox-dev / trading-1.0
       #      两个旧镜像跑的 1.0 版单文件脚本，那套代码的 current_drawdown 计算有 bug，
       #      永远读到 0）。参数原样保留自旧版，只是脚本调用换成新包的 CLI 模块。
       #      这一步只负责产出 data/*.json，不在这里推送日报 ----
-      - name: 容器内跑回测（单标的，2.0.0.dev 镜像）
+      - name: 容器内跑回测（单标的，2.0 镜像）
         run: |
           set -e
           docker run --rm \
@@ -74,7 +74,7 @@ jobs:
             -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             -e DB_PORT=${{ secrets.DB_PORT }} \
             -e DB_NAME=trading \
-            ghcr.io/lc4t/trading-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0:latest \
             bash -c "
               date && cd /app && \
               uv run python -m trading.cli.fetcher --start-date 2024-12-01 && \
@@ -92,7 +92,7 @@ jobs:
 
       # ---- 推送日报：daily_signal_digest.py 已经完整迁移进 trading.io.digest
       #      （含轮动信号汇总、列表符号/分隔线排版等），不再需要 ToolBox 的
-      #      toolbox-dev 镜像，直接复用上面已经拉起来的 trading-2.0.0.dev ----
+      #      toolbox-dev 镜像，直接复用上面已经拉起来的 trading-2.0 ----
       - name: 推送日报（trading 镜像）
         run: |
           set -e
@@ -102,7 +102,7 @@ jobs:
             -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
             -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
             -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
-            ghcr.io/lc4t/trading-2.0.0.dev:latest \
+            ghcr.io/lc4t/trading-2.0:latest \
             bash -c "
               cd /app && \
               ls -aslh data && \
