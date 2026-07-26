@@ -12,6 +12,7 @@ from .repository import DBClient
 import argparse
 import adata
 import pandas as pd
+import sys
 import time
 from yfinance.exceptions import YFRateLimitError
 
@@ -412,7 +413,7 @@ def main():
         logger.info("所有数据更新完成")
     else:
         logger.error("部分数据更新失败")
-        # exit(1)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@
 │   ├── strategies/             # base / signals / dual_ma / momentum / momentum_rotation
 │   ├── engine/                 # single / multi / sweep
 │   ├── analysis/               # metrics / report
-│   ├── io/                     # notify / json_export / csv_export / rotation_export
+│   ├── io/                     # notify / json_export / csv_export / rotation_export / digest
 │   ├── cli/                    # argparse 入口
 │   └── templates/              # Jinja2 报告模板
 ├── notebooks/quickstart.ipynb  # Jupyter 示例
@@ -35,11 +35,6 @@
 
 > 根目录的 `backtest.py` / `fetcher.py` 是 **向后兼容 shim**——
 > 老的工作流命令仍能直接使用，内部转发到 `tradingtest.cli.*`。
->
-> 每日信号汇总 + PushGo 推送不在这个包里：那部分逻辑功能更新、格式更完整的版本
-> 一直在 ToolBox 仓库的 `trading/daily_signal_digest.py`（`toolbox-dev` 镜像），
-> 生产的 `trading-v2.yml` 用它来推送日报，回测本身仍然用这个仓库的
-> `tradingtest-2.0.0.dev` 镜像。
 
 ## 安装
 
@@ -64,6 +59,37 @@ uv run python -m tradingtest.cli.backtest 159915.SZ \
   --use-chandelier --chandelier-multiplier 1.5 --chandelier-period 15 \
   --output-json data/159915.SZ.json
 ```
+
+## 交易信号日报
+
+当 `data/*.json`（及 `data/rotation/*.json`）已生成后，运行独立汇总命令，把当天所有标的/策略的状态汇总后推送到 PushGo。
+
+在 `.env` 中配置：
+
+```bash
+PUSHGO_CHANNEL_ID=your-channel-id
+PUSHGO_PASSWORD=your-channel-password
+# 可选，默认使用官方网关
+PUSHGO_URL=https://gateway.pushgo.dev/push
+```
+
+```bash
+uv run python -m tradingtest.cli.digest --data-dir frontend/data
+```
+
+可选参数：
+
+- `--date 2026-03-10`（默认 Asia/Shanghai 当天）
+- `--pushgo-url https://gateway.pushgo.dev/push`
+- `--max-retries 3` / `--retry-delay 5`
+- `--dry-run`（只输出标题和正文，不推送，本地验证格式用）
+
+行为说明：
+
+- 只汇总 `reportDate` 等于目标日期的 JSON（单标的在 `data-dir` 下，轮动策略在 `data-dir/rotation` 下）
+- 标题只统计 `买入`/`卖出`，`持有`/`观望` 仍会展示详情
+- 没有任何当天 JSON 时，会发送一条"无任何数据可用"的通知
+- PushGo 推送失败会按参数重试；超过重试次数后命令非零退出
 
 ## 交互式 API（2.0 新增）
 

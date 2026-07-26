@@ -90,27 +90,24 @@ jobs:
               ls -aslh data/rotation
             "
 
-      # ---- 推送日报：继续用 toolbox-dev 镜像（ToolBox 仓库 dev 分支）——它的
-      #      daily_signal_digest.py 比 TradingTest 里迁移过来的版本新，支持读取
-      #      data/rotation/*.json 汇总动量轮动信号、列表符号/分隔线排版等，
-      #      TradingTest 的 tradingtest.io.digest 还没跟上这些改动，如果直接拿它
-      #      推送会退化成没有轮动信号、排版更简陋的旧格式。两个镜像共用同一份
-      #      data/ 目录，谁产出 JSON 不影响谁来读它推送 ----
-      - name: 推送日报（toolbox-dev 镜像）
+      # ---- 推送日报：daily_signal_digest.py 已经完整迁移进 tradingtest.io.digest
+      #      （含轮动信号汇总、列表符号/分隔线排版等），不再需要 ToolBox 的
+      #      toolbox-dev 镜像，直接复用上面已经拉起来的 tradingtest-2.0.0.dev ----
+      - name: 推送日报（tradingtest 镜像）
         run: |
           set -e
           docker run --rm \
-            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/trading/data \
+            -v ${{ github.workspace }}/tradingtest/frontend/data:/app/data \
             -e TZ=Asia/Shanghai \
             -e PUSHGO_CHANNEL_ID=${{ secrets.PUSHGO_CHANNEL_ID }} \
             -e PUSHGO_PASSWORD=${{ secrets.PUSHGO_PASSWORD }} \
             -e PUSHGO_URL=${{ secrets.PUSHGO_URL }} \
-            ghcr.io/lc4t/toolbox-dev:latest \
+            ghcr.io/lc4t/tradingtest-2.0.0.dev:latest \
             bash -c "
-              cd /app/trading && \
+              cd /app && \
               ls -aslh data && \
               ls -aslh data/rotation && \
-              uv run python daily_signal_digest.py --data-dir data
+              uv run python -m tradingtest.cli.digest --data-dir data
             "
 
       - name: 让 runner 拥有 data/ 文件

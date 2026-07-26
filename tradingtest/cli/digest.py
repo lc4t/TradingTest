@@ -1,0 +1,118 @@
+"""digest CLI：汇总当日交易信号（单标的 + 动量轮动）并推送到 PushGo。
+
+示例:
+
+    uv run python -m tradingtest.cli.digest --data-dir frontend/data
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from datetime import date, datetime
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+from ..io.digest import (
+    DEFAULT_PUSHGO_URL,
+    build_digest,
+    load_reports,
+    load_rotation_reports,
+    send_pushgo_notification,
+    today_in_timezone,
+)
+
+
+def parse_date(value: str) -> date:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"无效日期: {value}") from exc
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="汇总当日交易信号并推送到 PushGo")
+    parser.add_argument(
+        "--data-dir",
+        default="frontend/data",
+        help="JSON 数据目录，默认 frontend/data",
+    )
+    parser.add_argument(
+        "--date",
+        dest="target_date",
+        type=parse_date,
+        help="目标日期，格式 YYYY-MM-DD，默认 Asia/Shanghai 当天",
+    )
+    parser.add_argument(
+        "--pushgo-url",
+        default=None,
+        help="PushGo 推送地址，默认读取 PUSHGO_URL 或使用官方网关",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="PushGo 最大重试次数，默认 3",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=int,
+        default=5,
+        help="PushGo 重试间隔秒数，默认 5",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只输出标题和正文，不执行推送",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    load_dotenv()
+    target_date = args.target_date or today_in_timezone()
+    data_dir = Path(args.data_dir)
+    reports, warnings, reason = load_reports(data_dir, target_date)
+    rotation_reports, rotation_warnings = load_rotation_reports(data_dir, target_date)
+    warnings.extend(rotation_warnings)
+
+    for warning in warnings:
+        print(f"[WARN] {warning}", file=sys.stderr)
+
+    title, body = build_digest(reports, target_date, reason, rotation_reports)
+
+    if args.dry_run:
+        print(title)
+        print(body)
+        return 0
+
+    channel_id = os.getenv("PUSHGO_CHANNEL_ID", "").strip()
+    password = os.getenv("PUSHGO_PASSWORD", "").strip()
+    pushgo_url = args.pushgo_url or os.getenv("PUSHGO_URL", DEFAULT_PUSHGO_URL)
+
+    if not channel_id or not password:
+        print("[ERROR] 缺少 PUSHGO_CHANNEL_ID 或 PUSHGO_PASSWORD", file=sys.stderr)
+        return 1
+
+    try:
+        response = send_pushgo_notification(
+            title=title,
+            body=body,
+            channel_id=channel_id,
+            password=password,
+            pushgo_url=pushgo_url,
+            max_retries=args.max_retries,
+            retry_delay=args.retry_delay,
+        )
+    except RuntimeError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
+
+    print(f"[INFO] PushGo 推送成功: {response.get('data', {}).get('message_id', 'unknown')}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
