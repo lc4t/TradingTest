@@ -206,8 +206,16 @@ class _MomentumBaseStrategy(bt.Strategy):
             delta_value = deltas[name]
             if delta_value >= 0:
                 continue
-            size_delta = _floor_int(-delta_value / feed.close[0])
-            size_delta = min(size_delta, self.getposition(feed).size)
+            if targets.get(name, 0.0) <= 0.0:
+                # 完全清仓：直接卖出实际持仓份额。用"目标市值 ÷ 当前价"反推
+                # 份额在这里会有浮点往返误差，偶尔比实际持仓少 1 股，卖不干净
+                # 的 1 股会一直挂在仓位里，污染后面 _build_rotations 重建的
+                # 持仓段（同一 symbol 后续任意一次卖出都会先"捡"到这笔陈年
+                # 尾差，导致 entryDate 被错误地拉回很久以前）。
+                size_delta = self.getposition(feed).size
+            else:
+                size_delta = _floor_int(-delta_value / feed.close[0])
+                size_delta = min(size_delta, self.getposition(feed).size)
             if size_delta <= 0:
                 continue
             order = self.sell(data=feed, size=size_delta)

@@ -15,6 +15,16 @@ from .json_export import get_stock_name
 SCHEMA_VERSION = "rotation-v1"
 
 
+class OverlappingRotationsError(RuntimeError):
+    """同一 symbol 的持仓段出现重叠/重复入场。
+
+    Top-1/Top-N 策略同一时刻只应该持有一个标的，出现这种情况说明交易记录
+    或 FIFO 重建逻辑有问题（常见根因：卖出份额有浮点尾差，没卖干净的
+    1 股会被后续无关的一次卖出误配对，把 entryDate 错误地拉回很久以前）。
+    这里选择直接报错而不是静默产出，避免带着错误数据发布到前端。
+    """
+
+
 def _date_str(v) -> str:
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
@@ -76,7 +86,25 @@ def _build_rotations(trades: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                         "pnl": round(t.get("pnl", 0.0), 2),
                     }
                 )
+    _validate_no_overlap(rotations)
     return rotations
+
+
+def _validate_no_overlap(rotations: List[Dict[str, Any]]) -> None:
+    """校验同一 symbol 的持仓段不重叠（Top-1/Top-N 同一时刻只能持有一个标的）。"""
+    by_symbol: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rotations:
+        by_symbol.setdefault(r["symbol"], []).append(r)
+
+    for symbol, segments in by_symbol.items():
+        segments = sorted(segments, key=lambda r: r["entryDate"])
+        for prev, cur in zip(segments, segments[1:]):
+            if cur["entryDate"] < prev["exitDate"]:
+                raise OverlappingRotationsError(
+                    f"{symbol} 持仓段重叠: "
+                    f"[{prev['entryDate']}..{prev['exitDate']}] 与 "
+                    f"[{cur['entryDate']}..{cur['exitDate']}]"
+                )
 
 
 def _trade_year(t: Dict[str, Any]) -> int:
