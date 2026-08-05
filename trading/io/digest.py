@@ -19,8 +19,8 @@ from urllib import error, request
 
 DEFAULT_PUSHGO_URL = "https://gateway.pushgo.dev/push"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
-TRADE_ACTIONS = {"买入", "卖出"}
-ACTION_PRIORITY = {"买入": 0, "卖出": 1, "持有": 2, "观望": 3}
+TRADE_ACTIONS = {"买入", "卖出", "换仓"}
+ACTION_PRIORITY = {"买入": 0, "换仓": 1, "卖出": 2, "持有": 3, "观望": 4}
 ACTION_ALIASES = {
     "BUY": "买入",
     "SELL": "卖出",
@@ -34,8 +34,8 @@ ROTATION_ACTION_LABELS = {
     "ROTATE": "换仓",
     "EXIT": "清仓",
 }
-ACTION_EMOJI = {"买入": "🟢", "卖出": "🔴", "持有": "🟡", "观望": "⚪"}
-ACTION_DISPLAY_LABEL = {"买入": "买入", "卖出": "卖出", "持有": "持有", "观望": "空仓"}
+ACTION_EMOJI = {"买入": "🟢", "换仓": "🔄", "卖出": "🔴", "持有": "🟡", "观望": "⚪"}
+ACTION_DISPLAY_LABEL = {"买入": "买入", "换仓": "换仓", "卖出": "卖出", "持有": "持有", "观望": "空仓"}
 # rotation-v1 JSON 没配 DB 名称查询时，currentHolding.name 会退化成 symbol 本身，
 # 推送里就看不出持有的到底是黄金 ETF 还是别的。候选池固定且很小，这里兜底一份中文名。
 KNOWN_SYMBOL_NAMES = {
@@ -342,11 +342,25 @@ def build_rotation_item(raw: dict, target_date_str: str) -> DigestItem:
     next_signal = raw.get("nextSignal") or {}
 
     exit_today = next((r for r in rotations if r.get("exitDate") == target_date_str), None)
+    next_signal_action = str(next_signal.get("action") or "").upper()
 
     if holding and holding.get("since") == target_date_str:
-        action = "买入"
+        # 已经发生的买入：如果同一天还清出了旧仓位，说明是当天完成的换仓，而不是从空仓建仓
+        action = "换仓" if exit_today else "买入"
     elif not holding:
-        action = "卖出" if exit_today else "观望"
+        if exit_today:
+            action = "卖出"
+        elif next_signal_action == "ROTATE":
+            # 尚未发生的建仓：nextSignal 算出该从空仓买入了，但交易还没实际执行
+            action = "买入"
+        else:
+            action = "观望"
+    elif next_signal_action == "ROTATE":
+        # 换仓交易还没实际发生（这是开盘前生成的下一步计划），currentHolding 仍是旧持仓，
+        # 不能因为 since != 今天就把它标成「持有」——那会让 PushGo 漏报换仓信号。
+        action = "换仓"
+    elif next_signal_action == "EXIT":
+        action = "卖出"
     else:
         action = "持有"
 
@@ -422,9 +436,9 @@ def build_digest(
 
     counts = {
         label: sum(1 for item in items if item.action == label)
-        for label in ("买入", "卖出", "持有", "观望")
+        for label in ("买入", "换仓", "卖出", "持有", "观望")
     }
-    trade_signal_count = counts["买入"] + counts["卖出"]
+    trade_signal_count = counts["买入"] + counts["换仓"] + counts["卖出"]
     title = (
         f"📊 [{date_str}] {trade_signal_count}个交易信号"
         if trade_signal_count
@@ -435,6 +449,7 @@ def build_digest(
         "# 📊 交易信号日报",
         f"📅 {date_str}",
         f"{ACTION_EMOJI['买入']} 买入 {counts['买入']} ｜ "
+        f"{ACTION_EMOJI['换仓']} 换仓 {counts['换仓']} ｜ "
         f"{ACTION_EMOJI['卖出']} 卖出 {counts['卖出']} ｜ "
         f"{ACTION_EMOJI['持有']} 持有 {counts['持有']} ｜ "
         f"{ACTION_EMOJI['观望']} 空仓 {counts['观望']}",

@@ -17,7 +17,7 @@ interface TradeData {
     end: string;
   };
   latestSignal: {
-    action: "观察" | "卖出" | "买入" | "持有";
+    action: "观察" | "卖出" | "买入" | "持有" | "换仓";
     asset: string;
     timestamp: string;
     prices?: {
@@ -111,7 +111,7 @@ interface RawTradeData extends Omit<TradeData, 'latestSignal'> {
 }
 
 // 确保 action 字段符合类型要求
-const normalizeAction = (action: string): "观察" | "卖出" | "买入" | "持有" => {
+const normalizeAction = (action: string): "观察" | "卖出" | "买入" | "持有" | "换仓" => {
   // 先统一转换为大写，以处理不同的大小写情况
   const upperAction = action.toUpperCase();
   switch (upperAction) {
@@ -121,12 +121,16 @@ const normalizeAction = (action: string): "观察" | "卖出" | "买入" | "持�
       return "卖出";
     case "HOLD":
       return "持有";
+    case "ROTATE":
+      return "换仓";
     case "持有":  // 处理已经是中文的情况
       return "持有";
     case "买入":
       return "买入";
     case "卖出":
       return "卖出";
+    case "换仓":
+      return "换仓";
     case "观察":
       return "观察";
     default:
@@ -165,6 +169,8 @@ const getButtonVariant = (action: string) => {
       return "hold";
     case "买入":
       return "buy";
+    case "换仓":
+      return "rotate";
     case "卖出":
       return "sell";
     case "观察":

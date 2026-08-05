@@ -361,6 +361,67 @@ class BuildDigestTests(unittest.TestCase):
         self.assertIn("当前持仓：空仓", body)
         self.assertIn("下次预期动作：清仓（所有标的动量都低于阈值或为 NaN，下次预期空仓）", body)
 
+    def test_build_digest_rotation_pending_rotate_not_yet_executed(self):
+        """nextSignal 算出今天该换仓，但换仓交易还没实际发生（currentHolding 仍是旧仓位）时，
+        不能被静默判成「持有」，否则 PushGo 会漏报换仓信号（回归自线上一次误报）。"""
+        target_date = date(2026, 7, 25)
+        rotation_reports = [
+            make_rotation_report(
+                "momentum-top1",
+                "动量轮动 Top-1",
+                "2026-07-25",
+                nextSignal={
+                    "action": "ROTATE",
+                    "reason": "下次预期换股: 159915.SZ → 513100.SS",
+                },
+            ),
+        ]
+
+        title, body = digest.build_digest([], target_date, "no_matching_reports", rotation_reports)
+
+        self.assertEqual(title, "📊 [2026-07-25] 1个交易信号")
+        self.assertIn("🔄 动量轮动 Top-1 · 创业板ETF（momentum-top1）换仓", body)
+        self.assertIn("下次预期动作：换仓（下次预期换股: 159915.SZ → 513100.SS）", body)
+
+    def test_build_digest_rotation_pending_exit_not_yet_executed(self):
+        target_date = date(2026, 7, 25)
+        rotation_reports = [
+            make_rotation_report(
+                "momentum-top1",
+                "动量轮动 Top-1",
+                "2026-07-25",
+                nextSignal={
+                    "action": "EXIT",
+                    "reason": "所有标的动量都低于阈值或为 NaN，下次预期空仓",
+                },
+            ),
+        ]
+
+        title, body = digest.build_digest([], target_date, "no_matching_reports", rotation_reports)
+
+        self.assertEqual(title, "📊 [2026-07-25] 1个交易信号")
+        self.assertIn("🔴 动量轮动 Top-1 · 创业板ETF（momentum-top1）卖出", body)
+
+    def test_build_digest_rotation_pending_buy_from_cash_not_yet_executed(self):
+        target_date = date(2026, 7, 25)
+        rotation_reports = [
+            make_rotation_report(
+                "momentum-top1",
+                "动量轮动 Top-1",
+                "2026-07-25",
+                currentHolding=None,
+                nextSignal={
+                    "action": "ROTATE",
+                    "reason": "下次预期换股: 空仓 → 159915.SZ",
+                },
+            ),
+        ]
+
+        title, body = digest.build_digest([], target_date, "no_matching_reports", rotation_reports)
+
+        self.assertEqual(title, "📊 [2026-07-25] 1个交易信号")
+        self.assertIn("🟢 动量轮动 Top-1 · 空仓（momentum-top1）买入", body)
+
     def test_build_digest_rotation_sell_today(self):
         target_date = date(2026, 7, 25)
         rotation_reports = [

@@ -23,6 +23,7 @@ const buttonVariants = cva(
         buy: "bg-green-200 text-green-900 shadow-sm hover:bg-green-300",
         sell: "bg-red-200 text-red-900 shadow-sm hover:bg-red-300",
         watch: "bg-gray-200 text-gray-900 shadow-sm hover:bg-gray-300",
+        rotate: "bg-blue-200 text-blue-900 shadow-sm hover:bg-blue-300",
       },
       size: {
         default: "h-9 px-4 py-2",

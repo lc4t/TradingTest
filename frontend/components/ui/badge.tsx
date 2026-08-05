@@ -19,6 +19,7 @@ const badgeVariants = cva(
         buy: "border-transparent bg-green-500 text-green-950 shadow hover:bg-green-500/80",
         sell: "border-transparent bg-red-500 text-red-950 shadow hover:bg-red-500/80",
         watch: "border-transparent bg-gray-100 text-gray-900 shadow hover:bg-gray-200",
+        rotate: "border-transparent bg-blue-500 text-blue-950 shadow hover:bg-blue-500/80",
       },
     },
     defaultVariants: {

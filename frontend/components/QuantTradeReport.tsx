@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { formatMoney } from '../utils/formatMoney';
 
 interface TradeSignal {
-  action: "观察" | "卖出" | "买入" | "持有";
+  action: "观察" | "卖出" | "买入" | "持有" | "换仓";
   asset: string;
   timestamp: string;
   prices?: {
@@ -145,6 +145,8 @@ function LatestSignalSection({ signal, symbol }: { signal: TradeSignal, symbol: 
         return "hold";
       case "买入":
         return "buy";
+      case "换仓":
+        return "rotate";
       case "卖出":
         return "sell";
       case "观察":

@@ -97,13 +97,23 @@ interface RotationTradeRow {
   symbol?: string
 }
 
-function todayAction(data: RotationData): "买入" | "卖出" | "持有" | "观察" {
+function todayAction(data: RotationData): "买入" | "换仓" | "卖出" | "持有" | "观察" {
   const holding = data.currentHolding
-  if (holding && holding.since === data.reportDate) return "买入"
-  if (!holding) {
-    const soldToday = data.rotations.some((r) => r.exitDate === data.reportDate)
-    return soldToday ? "卖出" : "观察"
+  const soldToday = data.rotations.some((r) => r.exitDate === data.reportDate)
+
+  if (holding && holding.since === data.reportDate) {
+    // 已经发生的买入：如果同一天还清出了旧仓位，说明是当天完成的换仓，而不是从空仓建仓
+    return soldToday ? "换仓" : "买入"
   }
+  if (!holding) {
+    if (soldToday) return "卖出"
+    // 尚未发生的建仓：nextSignal 算出该从空仓买入了，但交易还没实际执行
+    return data.nextSignal.action === "ROTATE" ? "买入" : "观察"
+  }
+  // 换仓/清仓交易还没实际发生（这是开盘前生成的下一步计划），currentHolding 仍是旧持仓，
+  // 不能因为 since 不是今天就判成「持有」——那会让页面漏报换仓信号。
+  if (data.nextSignal.action === "ROTATE") return "换仓"
+  if (data.nextSignal.action === "EXIT") return "卖出"
   return "持有"
 }
 
